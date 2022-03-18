@@ -1,0 +1,7 @@
+*
+zig-cache/
+
+!.gitignore
+!/src/
+!*.zig
+!*.md
