@@ -21,9 +21,8 @@ goals/limits:
 * configurable mime-opener, xdg-open as fallback
 * able to read files from stdin: `find | umbra`
 * no async
-* no process
+* no multi-process
 * no filesystem modification: rm, mv ...
 * configurable color for basename
 * sort by directory, then mtime or size or nature
-
-
+* fore/back buffer for delta rendering

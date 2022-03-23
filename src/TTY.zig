@@ -6,33 +6,47 @@ const fs = std.fs;
 const mem = std.mem;
 const os = std.os;
 const system = std.os.linux;
+const io = std.io;
 
-const EscSeq = @import("./EscapeSequence.zig");
+const escseq = @import("./escseq.zig");
 
 const TTY = @This();
 const Self = TTY;
 
-f: fs.File,
-r: fs.File.Reader,
-w: fs.File.Writer,
-cmd: EscSeq,
+// shortcuts
+pub const Reader = fs.File.Reader;
+pub const Writer = fs.File.Writer;
+pub const BufferedWriter = io.BufferedWriter(16 << 10, Writer);
 
-origin: system.termios,
-term: system.termios,
+pub const EscSeq = struct {
+    pub const Cursor = escseq.Cursor(Writer);
+    pub const Erase = escseq.Erase(Writer);
+    pub const Private = escseq.Private(Writer);
+    pub const Style = escseq.Style(BufferedWriter.Writer);
+    pub const Foreground = escseq.Foreground(BufferedWriter.Writer);
+    pub const Backround = escseq.Background(BufferedWriter.Writer);
+
+    pub fn cmd(comptime Group: type, w: anytype) type {
+        return Group{ .writer = w };
+    }
+};
+
+file: fs.File = undefined,
+origin: system.termios = undefined,
+term: system.termios = undefined,
 
 pub fn init() !TTY {
-    const f = try fs.openFileAbsolute("/dev/tty", .{ .read = true, .write = true });
-    errdefer f.close();
+    var file = try fs.openFileAbsolute("/dev/tty", .{ .read = true, .write = true });
+    errdefer file.close();
 
-    const r = f.reader();
-
-    const w = f.writer();
-    const cmd = EscSeq.init(w);
-
-    const origin = try os.tcgetattr(f.handle);
+    const origin = try os.tcgetattr(file.handle);
     const term = origin;
 
-    var tty = TTY{ .f = f, .r = r, .w = w, .cmd = cmd, .origin = origin, .term = term };
+    var tty = TTY{
+        .file = file,
+        .origin = origin,
+        .term = term,
+    };
 
     try tty.setupTerm();
     errdefer tty.resetTerm() catch unreachable;
@@ -43,10 +57,11 @@ pub fn init() !TTY {
     return tty;
 }
 
-pub fn deinit(self: Self) void {
+pub fn deinit(self: *Self) void {
+    defer self.file.close();
+
     self.cleanCanvas() catch unreachable;
     self.resetTerm() catch unreachable;
-    self.f.close();
 }
 
 fn setupTerm(self: *Self) !void {
@@ -74,23 +89,31 @@ fn resetTerm(self: Self) !void {
 }
 
 fn setupCanvas(self: Self) !void {
-    try self.cmd.cursor.save();
-    try self.cmd.private.saveScreen();
-    try self.cmd.private.enableAlternativeBuf();
+    const w = self.writer();
+    const cursor = EscSeq.Cursor{ .writer = w };
+    const private = EscSeq.Private{ .writer = w };
+
+    try cursor.save();
+    try private.saveScreen();
+    try private.enableAlternativeBuf();
 }
 
 fn cleanCanvas(self: Self) !void {
-    try self.cmd.private.disableAlternativeBuf();
-    try self.cmd.private.restoreScreen();
-    try self.cmd.cursor.restore();
+    const w = self.writer();
+    const cursor = EscSeq.Cursor{ .writer = w };
+    const private = EscSeq.Private{ .writer = w };
+
+    try private.disableAlternativeBuf();
+    try private.restoreScreen();
+    try cursor.restore();
 }
 
 fn applyTermiosChanges(self: Self, term: system.termios) !void {
-    try os.tcsetattr(self.f.handle, .FLUSH, term);
+    try os.tcsetattr(self.file.handle, .FLUSH, term);
 }
 
 fn applyTermiosChangesNow(self: Self, term: system.termios) !void {
-    try os.tcsetattr(self.f.handle, .NOW, term);
+    try os.tcsetattr(self.file.handle, .NOW, term);
 }
 
 pub fn enableMultibytesInput(self: *Self) !void {
@@ -105,19 +128,18 @@ pub fn disableMultibytesInput(self: *Self) !void {
     try self.applyTermiosChangesNow(self.term);
 }
 
-
 // single-char key
 // multi-char key: F10, alt-a, arrow-up
 // multi-char mouse
-pub fn getInput(self: *Self) ![]const u8 {
-    {
-        var buffer: [1]u8 = undefined;
+pub fn getInput(self: *Self, buffer: *[16]u8) !usize {
+    const r = self.reader();
 
-        const n = try self.r.read(&buffer);
+    {
+        const n = try r.read(buffer[0..1]);
         if (n != 1) unreachable;
 
         if (buffer[0] != '\x1B') {
-            return &buffer;
+            return 1;
         }
     }
 
@@ -125,10 +147,79 @@ pub fn getInput(self: *Self) ![]const u8 {
         try self.enableMultibytesInput();
         defer self.disableMultibytesInput() catch unreachable;
 
-        var buffer: [16]u8 = undefined;
-        buffer[0] = '\x1B';
-        const n = try self.r.read(buffer[1..]);
-
-        return buffer[0..n+1];
+        const n = try r.read(buffer[1..]);
+        return n + 1;
     }
+}
+
+pub const WinSize = struct {
+    col_total: u16,
+    // col_high = col_total - 1; 0-based
+    col_high: u16,
+    row_total: u16,
+    row_high: u16,
+
+    pub const Resized = struct {
+        col: ?Change = null,
+        row: ?Change = null,
+
+        pub const Change = struct {
+            from: u16,
+            to: u16,
+        };
+    };
+
+    pub fn fromNative(native: system.winsize) WinSize {
+        return .{
+            .col_total = native.ws_col,
+            .col_high = native.ws_col - 1,
+            .row_total = native.ws_row,
+            .row_high = native.ws_row - 1,
+        };
+    }
+
+    pub fn sync(self: *WinSize, native: system.winsize) Resized {
+        var resized = Resized{};
+
+        if (self.col_total != native.ws_col) {
+            resized.col = .{ .from = self.col_high, .to = native.ws_col - 1 };
+            self.col_total = native.ws_col;
+            self.col_high = native.ws_col - 1;
+        }
+
+        if (self.row_total != native.ws_row) {
+            resized.row = .{ .from = self.row_high, .to = native.ws_row - 1 };
+            self.row_total = native.ws_row;
+            self.row_high = native.ws_row - 1;
+        }
+
+        return resized;
+    }
+};
+
+pub fn getWinSize(self: Self) !WinSize {
+    return WinSize.fromNative(try getNativeWinSize(self.file.handle));
+}
+
+pub fn getNativeWinSize(fd: system.fd_t) !system.winsize {
+    var native = mem.zeroes(system.winsize);
+    const rc = system.ioctl(fd, system.T.IOCGWINSZ, @ptrToInt(&native));
+
+    if (os.errno(rc) != .SUCCESS) {
+        return os.unexpectedErrno(@intToEnum(system.E, rc));
+    }
+
+    return native;
+}
+
+pub fn reader(self: Self) Reader {
+    return self.file.reader();
+}
+
+pub fn writer(self: Self) Writer {
+    return self.file.writer();
+}
+
+pub fn buffered_writer(self: Self) BufferedWriter {
+    return .{ .unbuffered_writer = self.writer() };
 }

@@ -1,15 +1,14 @@
+// todo: assert output, utilize a BufferedWriter
+
 const std = @import("std");
 const io = std.io;
 const fs = std.fs;
-const time = std.time;
 
-const EscSeq = @import("./EscapeSequence.zig");
+const escseq = @import("./escseq.zig");
+const Writer = fs.File.Writer;
 
-const testing = std.testing;
-
-
-fn fgapi(w: fs.File.Writer) !void {
-    const fg = EscSeq.Foreground{.w = w};
+fn fgapi(w: Writer) !void {
+    const fg = escseq.Foreground(Writer).init(w);
     defer fg.default() catch unreachable;
 
     try fg.color(.black);
@@ -37,8 +36,8 @@ fn fgapi(w: fs.File.Writer) !void {
     try w.writeAll("yellow");
 }
 
-fn bgapi(w: fs.File.Writer) !void {
-    const bg = EscSeq.Background{.w = w};
+fn bgapi(w: Writer) !void {
+    const bg = escseq.Background(Writer).init(w);
     defer bg.default() catch unreachable;
 
     try bg.color(.black);
@@ -67,8 +66,8 @@ fn bgapi(w: fs.File.Writer) !void {
 
 }
 
-fn cursorapi(w: anytype) !void {
-    const cursor = EscSeq.Cursor{.w = w};
+fn cursorapi(w: Writer) !void {
+    const cursor = escseq.Cursor(Writer).init(w);
 
     try cursor.save();
     defer cursor.restore() catch unreachable;
@@ -80,8 +79,8 @@ fn cursorapi(w: anytype) !void {
     try cursor.back(5);
 }
 
-fn styleapi(w: fs.File.Writer) !void {
-    const style = EscSeq.Style{.w = w};
+fn styleapi(w: Writer) !void {
+    const style = escseq.Style(Writer).init(w);
 
     defer style.reset() catch unreachable;
 
@@ -111,22 +110,6 @@ fn styleapi(w: fs.File.Writer) !void {
 
 }
 
-test "bg" {
-    try bgapi(io.getStdOut().writer());
-}
-
-test "fg" {
-    try fgapi(io.getStdOut().writer());
-}
-
-test "cursor" {
-    try cursorapi(io.getStdOut().writer());
-}
-
-test "style" {
-    try styleapi(io.getStdOut().writer());
-}
-
 pub fn main() !void {
 
     const w = io.getStdOut().writer();
@@ -141,4 +124,5 @@ pub fn main() !void {
 
     try w.writeAll("\n");
     try styleapi(w);
+
 }
