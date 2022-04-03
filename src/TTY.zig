@@ -75,6 +75,10 @@ fn setupTerm(self: *Self) !void {
         system.tcflag_t,
         system.IXON | system.ICRNL | system.BRKINT | system.INPCK | system.ISTRIP,
     );
+    self.term.iflag &= ~@as(
+        system.tcflag_t,
+        system.IUTF8,
+    );
 
     // read() return delays time when got something
     self.term.cc[system.V.TIME] = 0;

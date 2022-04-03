@@ -17,7 +17,7 @@ pub fn Cursor(comptime Writer: type) type {
         const Self = @This();
 
         pub fn init(writer: Writer) Self {
-            return .{.writer = writer};
+            return .{ .writer = writer };
         }
 
         pub fn hide(self: Self) !void {
@@ -83,7 +83,6 @@ pub fn Cursor(comptime Writer: type) type {
         pub fn prevLine(self: Self, n: u16) !void {
             try fmt.format(self.writer, "\x1B[{d}F", .{n});
         }
-
     };
 }
 
@@ -94,7 +93,7 @@ pub fn Erase(comptime Writer: type) type {
         const Self = @This();
 
         pub fn init(writer: Writer) Self {
-            return .{.writer = writer};
+            return .{ .writer = writer };
         }
 
         pub fn toLineEnd(self: Self) !void {
@@ -135,7 +134,7 @@ pub fn Style(comptime Writer: type) type {
         const Self = @This();
 
         pub fn init(writer: Writer) Self {
-            return .{.writer = writer};
+            return .{ .writer = writer };
         }
 
         pub fn reset(self: Self) !void {
@@ -227,7 +226,7 @@ pub fn Foreground(comptime Writer: type) type {
         };
 
         pub fn init(writer: Writer) Self {
-            return .{.writer = writer};
+            return .{ .writer = writer };
         }
 
         pub fn color(self: Self, code: Code) !void {
@@ -259,7 +258,7 @@ pub fn Background(comptime Writer: type) type {
         };
 
         pub fn init(writer: Writer) Self {
-            return .{.writer = writer};
+            return .{ .writer = writer };
         }
 
         pub fn color(self: Self, code: Code) !void {
@@ -279,7 +278,7 @@ pub fn Private(comptime Writer: type) type {
         const Self = @This();
 
         pub fn init(writer: Writer) Self {
-            return .{.writer = writer};
+            return .{ .writer = writer };
         }
 
         pub fn hideCursor(self: Self) !void {
@@ -315,7 +314,6 @@ pub fn Private(comptime Writer: type) type {
         }
     };
 }
-
 
 /// select graphic rendition
 pub fn SGR(comptime Writer: type) type {
@@ -364,7 +362,7 @@ pub fn SGR(comptime Writer: type) type {
         };
 
         pub fn init(writer: Writer) Self {
-            return .{.writer = writer};
+            return .{ .writer = writer };
         }
 
         pub fn rendition(self: Self, attrs: []const Rendition) !void {
@@ -376,6 +374,51 @@ pub fn SGR(comptime Writer: type) type {
             }
             try self.writer.writeAll("m");
         }
+    };
+}
 
+// ref `$ infocmp tmux-256color`
+pub fn Cap(comptime Writer: type) type {
+    return struct {
+        writer: Writer,
+        kind: Kind,
+
+        const Self = @This();
+        pub const Kind = enum { Tmux, Alacritty };
+
+        pub fn init(writer: Writer, kind: Kind) Self {
+            return .{ .writer = writer, .kind = kind };
+        }
+
+        pub fn toStatusLine(self: Self) !void {
+            try self.writer.writeAll(switch (self.kind) {
+                .Tmux => "\x1B]0;",
+                .Alacritty => "\x1B]2;",
+            });
+        }
+
+        pub fn fromStatusLine(self: Self) !void {
+            try self.writer.writeAll("^G");
+        }
+
+        pub fn disableStatusLine(self: Self) !void {
+            try self.writer.writeAll(switch (self.kind) {
+                .Tmux => "\x1B]0;\x0007",
+                .Alacritty => "\x1B]2;\x0007",
+            });
+        }
+
+        pub fn insertLine(self: Self) !void {
+            try self.writer.writeAll("\x1B[L");
+        }
+
+        pub fn deleteLine(self: Self) !void {
+            try self.writer.writeAll("\x1B[M");
+        }
+
+        /// inclusive range of row, (low, high), 0-based
+        pub fn changeScrollableRegion(self: Self, low: u16, high: u16) !void {
+            try fmt.format(self.writer, "\x1B[{d};{d}r", .{ low + 1, high + 1 });
+        }
     };
 }

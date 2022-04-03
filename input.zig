@@ -5,7 +5,7 @@ const mem = std.mem;
 const fmt = std.fmt;
 const assert = std.debug.assert;
 
-const umbra = @import("./src/umbra.zig");
+const umbra = @import("../umbra");
 const TTY = umbra.TTY;
 const EscSeq = TTY.EscSeq;
 
