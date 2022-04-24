@@ -22,11 +22,11 @@ pub fn main() !void {
         defer buffer.flush() catch unreachable;
 
         const wb = buffer.writer();
-        var cap = escseq.Cap(TTY.BufferedWriter.Writer).init(wb, .Alacritty);
+        const Cap = escseq.Cap;
 
-        try cap.toStatusLine();
+        try Cap.toStatusLine(.Alacritty, wb);
         try wb.writeAll("hello 1/10");
-        try cap.fromStatusLine();
+        try Cap.fromStatusLine(wb);
     }
 
     var input_buffer: [16]u8 = undefined;

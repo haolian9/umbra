@@ -5,9 +5,9 @@ const mem = std.mem;
 const fmt = std.fmt;
 const assert = std.debug.assert;
 
-const umbra = @import("../umbra");
+const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
-const EscSeq = TTY.EscSeq;
+const escseq = umbra.escseq;
 
 const MouseEvent = struct {
     btn: Btn,
@@ -67,7 +67,6 @@ pub fn inputLoop(tty: *umbra.TTY) !void {
     var buffer: [16]u8 = undefined;
 
     const w = tty.writer();
-    const curcmd = EscSeq.Cursor.init(w);
 
     while (true) {
         const input = blk: {
@@ -83,10 +82,10 @@ pub fn inputLoop(tty: *umbra.TTY) !void {
 
             if (input[1] == '[') {
                 switch (input[2]) {
-                    'A' => try curcmd.up(1),
-                    'B' => try curcmd.down(1),
-                    'C' => try curcmd.forward(1),
-                    'D' => try curcmd.back(1),
+                    'A' => try escseq.Cursor.up(w, 1),
+                    'B' => try escseq.Cursor.down(w, 1),
+                    'C' => try escseq.Cursor.forward(w, 1),
+                    'D' => try escseq.Cursor.back(w, 1),
                     '<' => {
                         const event = try MouseEvent.fromString(input);
                         try w.print("input: mouse: {s}\n", .{event});
@@ -100,13 +99,13 @@ pub fn inputLoop(tty: *umbra.TTY) !void {
         } else if (input.len == 1) {
             switch (input[0]) {
                 'q', 'Q' => break,
-                '0' => try curcmd.home(),
+                '0' => try escseq.Cursor.home(w),
                 '\r', '\n' => try w.print("input: enter\n", .{}),
                 '\t' => try w.print("input: tab\n", .{}),
-                'h' => try curcmd.back(1),
-                'j' => try curcmd.down(1),
-                'k' => try curcmd.up(1),
-                'l' => try curcmd.forward(1),
+                'h' => try escseq.Cursor.back(w, 1),
+                'j' => try escseq.Cursor.down(w, 1),
+                'k' => try escseq.Cursor.up(w, 1),
+                'l' => try escseq.Cursor.forward(w, 1),
                 else => |char| try w.print("input: {d} '{u}'\n", .{ char, char }),
             }
         } else {
@@ -120,13 +119,11 @@ pub fn main() !void {
     defer tty.deinit();
 
     const w = tty.writer();
-    const pricmd = EscSeq.Private.init(w);
-    const curcmd = EscSeq.Cursor.init(w);
 
-    try pricmd.enableMouseInput();
-    defer pricmd.disableMouseInput() catch unreachable;
+    try escseq.Private.enableMouseInput(w);
+    defer escseq.Private.disableMouseInput(w) catch unreachable;
 
-    try curcmd.home();
+    try escseq.Cursor.home(w);
 
     try inputLoop(&tty);
 }

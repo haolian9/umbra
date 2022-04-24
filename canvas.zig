@@ -22,9 +22,9 @@ pub const Range = struct {
 };
 
 pub const Canvas = struct {
-    buffer: BufferedWriter,
+    buffer: *BufferedWriter,
     winsize: WinSize,
-    data: Data,
+    data: *const Data,
     // partial view of data
     range: Range,
     // split scoped data into vertical windows
@@ -32,7 +32,7 @@ pub const Canvas = struct {
 
     const Self = @This();
 
-    pub fn init(buffer: BufferedWriter, winsize: WinSize, data: Data, split: u8) Canvas {
+    pub fn init(buffer: *BufferedWriter, winsize: WinSize, data: *const Data, split: u8) Canvas {
         assert(split > 0 and split < 10);
 
         return .{

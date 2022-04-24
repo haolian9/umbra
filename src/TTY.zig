@@ -18,19 +18,6 @@ pub const Reader = fs.File.Reader;
 pub const Writer = fs.File.Writer;
 pub const BufferedWriter = io.BufferedWriter(16 << 10, Writer);
 
-pub const EscSeq = struct {
-    pub const Cursor = escseq.Cursor(Writer);
-    pub const Erase = escseq.Erase(Writer);
-    pub const Private = escseq.Private(Writer);
-    pub const Style = escseq.Style(BufferedWriter.Writer);
-    pub const Foreground = escseq.Foreground(BufferedWriter.Writer);
-    pub const Backround = escseq.Background(BufferedWriter.Writer);
-
-    pub fn cmd(comptime Group: type, w: anytype) type {
-        return Group{ .writer = w };
-    }
-};
-
 file: fs.File = undefined,
 origin: system.termios = undefined,
 term: system.termios = undefined,
@@ -94,22 +81,18 @@ fn resetTerm(self: Self) !void {
 
 fn setupCanvas(self: Self) !void {
     const w = self.writer();
-    const cursor = EscSeq.Cursor{ .writer = w };
-    const private = EscSeq.Private{ .writer = w };
 
-    try cursor.save();
-    try private.saveScreen();
-    try private.enableAlternativeBuf();
+    try escseq.Cursor.save(w);
+    try escseq.Private.saveScreen(w);
+    try escseq.Private.enableAlternativeBuf(w);
 }
 
 fn cleanCanvas(self: Self) !void {
     const w = self.writer();
-    const cursor = EscSeq.Cursor{ .writer = w };
-    const private = EscSeq.Private{ .writer = w };
 
-    try private.disableAlternativeBuf();
-    try private.restoreScreen();
-    try cursor.restore();
+    try escseq.Private.disableAlternativeBuf(w);
+    try escseq.Private.restoreScreen(w);
+    try escseq.Cursor.restore(w);
 }
 
 fn applyTermiosChanges(self: Self, term: system.termios) !void {

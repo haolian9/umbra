@@ -6,7 +6,6 @@ const fmt = std.fmt;
 
 const umbra = @import("../src/umbra.zig");
 const TTY = umbra.TTY;
-const EscSeq = TTY.EscSeq;
 
 pub fn main() !void {
     print("hello and welcome\n", .{});

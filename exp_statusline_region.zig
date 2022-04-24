@@ -72,6 +72,9 @@ pub fn main() !void {
     const main_high = winsize.row_high - 1;
     const status_high = main_high + 1;
 
+    const curcmd = escseq.Cursor;
+    const eracmd = escseq.Erase;
+
     // panorama->scope: scroll up/down
     // window/pane->cursor: up/down
 
@@ -80,24 +83,22 @@ pub fn main() !void {
         defer buffer.flush() catch unreachable;
 
         const wb = buffer.writer();
-        var capcmd = escseq.Cap(TTY.BufferedWriter.Writer).init(wb, .Alacritty);
-        var curcmd = escseq.Cursor(TTY.BufferedWriter.Writer).init(wb);
 
-        try capcmd.changeScrollableRegion(0, main_high);
+        try escseq.Cap.changeScrollableRegion(wb, 0, main_high);
 
         // main window
         {
-            try curcmd.home();
+            try curcmd.home(wb);
             var i: usize = 0;
             while (i <= main_high) : (i += 1) {
                 try fmt.format(wb, "* {d}", .{i});
-                try curcmd.nextLine(1);
+                try curcmd.nextLine(wb, 1);
             }
         }
 
         // status line
         {
-            try curcmd.goto(0, status_high);
+            try curcmd.goto(wb, 0, status_high);
             try wb.writeAll("files 1/10");
         }
     }
@@ -107,16 +108,13 @@ pub fn main() !void {
         defer buffer.flush() catch unreachable;
 
         const wb = buffer.writer();
-        //var capcmd = escseq.Cap(TTY.BufferedWriter.Writer).init(wb, .Alacritty);
-        var curcmd = escseq.Cursor(TTY.BufferedWriter.Writer).init(wb);
-        var eracmd = escseq.Erase(TTY.BufferedWriter.Writer).init(wb);
 
         // main window's high row
         const mid = (winsize.row_high - 1) / 2;
         var row: u16 = mid;
         var input_buffer: [16]u8 = undefined;
 
-        try curcmd.goto(0, mid);
+        try curcmd.goto(wb, 0, mid);
         try buffer.flush();
 
         while (true) {
@@ -129,32 +127,32 @@ pub fn main() !void {
                 'q' => break,
                 'j' => {
                     if (row > main_high) {
-                        try curcmd.down(1);
+                        try curcmd.down(wb, 1);
                     } else if (row == main_high) {
                         continue;
                     } else {
                         defer row += 1;
-                        try curcmd.save();
-                        try curcmd.scrollUp(1);
-                        try curcmd.goto(0, main_high);
-                        try eracmd.toLineEnd();
+                        try curcmd.save(wb);
+                        try curcmd.scrollUp(wb, 1);
+                        try curcmd.goto(wb, 0, main_high);
+                        try eracmd.toLineEnd(wb);
                         try fmt.format(wb, "* {d}", .{row + mid + 1});
-                        try curcmd.restore();
+                        try curcmd.restore(wb);
                     }
                 },
                 'k' => {
                     if (row < mid) {
-                        try curcmd.up(1);
+                        try curcmd.up(wb, 1);
                     } else if (row == mid) {
                         continue;
                     } else {
                         defer row -= 1;
-                        try curcmd.save();
-                        try curcmd.scrollDown(1);
-                        try curcmd.goto(0, 0);
-                        try eracmd.toLineEnd();
+                        try curcmd.save(wb);
+                        try curcmd.scrollDown(wb, 1);
+                        try curcmd.goto(wb, 0, 0);
+                        try eracmd.toLineEnd(wb);
                         try fmt.format(wb, "* {d}", .{row - mid - 1});
-                        try curcmd.restore();
+                        try curcmd.restore(wb);
                     }
                 },
                 else => {},
