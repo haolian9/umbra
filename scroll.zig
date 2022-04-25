@@ -87,17 +87,7 @@ pub fn main() !void {
                 try escseq.Cursor.save(wb);
                 try escseq.Cursor.goto(wb, 0, status_low);
                 try escseq.Erase.line(wb);
-                switch (event) {
-                    .Mouse => |mouse| {
-                        try fmt.format(wb, "ignored chars: mouse {any}", .{mouse});
-                    },
-                    .Ascii => |ascii| {
-                        try fmt.format(wb, "ignored chars: ascii {any}", .{ascii});
-                    },
-                    .Combo => |combo| {
-                        try fmt.format(wb, "ignored chars: combo {any}", .{combo});
-                    },
-                }
+                try fmt.format(wb, "{}", .{event});
                 try escseq.Cursor.restore(wb);
                 continue;
             }
@@ -189,17 +179,7 @@ pub fn main() !void {
                     try escseq.Cursor.save(wb);
                     try escseq.Cursor.goto(wb, 0, status_low);
                     try escseq.Erase.line(wb);
-                    switch (event) {
-                        .Mouse => |mouse| {
-                            try fmt.format(wb, "ignored chars: mouse {any}", .{mouse});
-                        },
-                        .Ascii => |ascii| {
-                            try fmt.format(wb, "ignored chars: ascii {any}", .{ascii});
-                        },
-                        .Combo => |combo| {
-                            try fmt.format(wb, "ignored chars: combo {any}", .{combo});
-                        },
-                    }
+                    try fmt.format(wb, "{}", .{event});
                     try escseq.Cursor.restore(wb);
                 },
             }

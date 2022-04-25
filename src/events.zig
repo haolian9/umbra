@@ -5,34 +5,54 @@ const fmt = std.fmt;
 
 pub const Event = union(enum) {
     Mouse: MouseEvent,
-    Ascii: AsciiKeyboardEvent,
-    Combo: ComboKeyboardEvent,
+    Char: CharKeyboardEvent,
+    Rune: RuneKeyboardEvent,
+
+    const Self = @This();
 
     pub fn fromString(input: []const u8) !Event {
         if (input[0] == '\x1B') {
             if (input.len == 1) {
-                return Event{ .Ascii = .{ .char = '\x1B' } };
+                return Event{ .Char = .{ .char = '\x1B' } };
             }
 
             if (input[1] == '[') {
                 return switch (input[2]) {
                     '<' => Event{ .Mouse = try MouseEvent.fromString(input) },
-                    else => Event{ .Combo = .{ .chars = input } },
+                    else => Event{ .Rune = .{ .rune = input } },
                 };
             } else {
-                return Event{ .Combo = .{ .chars = input } };
+                return Event{ .Rune = .{ .rune = input } };
             }
         } else if (input.len == 1) {
-            return Event{ .Ascii = .{ .char = input[0] } };
+            return Event{ .Char = .{ .char = input[0] } };
         } else {
             unreachable;
+        }
+    }
+
+    pub fn format(self: Self, comptime _: []const u8, options: fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+
+        switch (self) {
+            .Mouse => |mouse| {
+                try fmt.format(writer, "ignored chars: mouse {any}", .{mouse});
+            },
+            .Char => |char| {
+                try fmt.format(writer, "ignored chars: char {any}", .{char});
+            },
+            .Rune => |rune| {
+                try fmt.format(writer, "ignored chars: rune {any}", .{rune});
+            },
         }
     }
 };
 
 pub const MouseEvent = struct {
     btn: Btn,
+    // 0-based
     col: u16,
+    // 0-based
     row: u16,
     state: State, // pressed on or off
 
@@ -61,15 +81,15 @@ pub const MouseEvent = struct {
         else
             return error.invalidButton;
 
-        const col = if (it.next()) |code|
+        const col: u16 = (if (it.next()) |code|
             try fmt.parseInt(u8, code, 10)
         else
-            return error.invalidColumn;
+            return error.invalidColumn) - 1;
 
-        const row = if (it.next()) |code|
+        const row: u16 = (if (it.next()) |code|
             try fmt.parseInt(u8, code, 10)
         else
-            return error.invalidRow;
+            return error.invalidRow) - 1;
 
         assert(it.next() == null);
 
@@ -84,10 +104,10 @@ pub const MouseEvent = struct {
     }
 };
 
-pub const AsciiKeyboardEvent = struct {
+pub const CharKeyboardEvent = struct {
     char: u8,
 };
 
-pub const ComboKeyboardEvent = struct {
-    chars: []const u8,
+pub const RuneKeyboardEvent = struct {
+    rune: []const u8,
 };
