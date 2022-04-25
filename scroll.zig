@@ -9,6 +9,7 @@ const fmt = std.fmt;
 const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
 const escseq = umbra.escseq;
+const Event = umbra.events.Event;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -39,6 +40,15 @@ pub fn main() !void {
     };
     defer allocator.free(data);
 
+    const status_rows = 1;
+    const screen_high = winsize.row_high - status_rows;
+    const status_low = screen_high + 1;
+
+    // construct frames
+    try escseq.Cap.changeScrollableRegion(w, 0, winsize.row_high - status_rows);
+    try escseq.Private.enableMouseInput(w);
+    defer escseq.Private.disableMouseInput(w) catch unreachable;
+
     // first draw
     {
         defer buffer.flush() catch unreachable;
@@ -46,10 +56,12 @@ pub fn main() !void {
         try escseq.Cursor.home(wb);
         defer escseq.Cursor.home(wb) catch unreachable;
 
-        for (data[0..winsize.row_total]) |i| {
+        for (data[0 .. screen_high + 1]) |i| {
             try escseq.Cursor.goto(wb, 0, i);
             try wb.print(" {}", .{i});
         }
+        try escseq.Cursor.goto(wb, 0, status_low);
+        try wb.print("total: {}", .{data.len});
     }
 
     // interact
@@ -58,29 +70,47 @@ pub fn main() !void {
 
         var screen_cursor: u16 = 0;
         var data_cursor: usize = 0;
-        _ = data_cursor;
         var input_buffer: [16]u8 = undefined;
 
         try escseq.Cursor.home(w);
-        try escseq.Cap.changeScrollableRegion(w, 0, winsize.row_high - 1);
 
         while (true) {
             defer buffer.flush() catch unreachable;
 
-            const n = try tty.getInput(&input_buffer);
+            const input = blk: {
+                const n = try tty.getInput(&input_buffer);
+                break :blk input_buffer[0..n];
+            };
+            const event = try Event.fromString(input);
 
-            const input = input_buffer[0..n];
-            if (input.len != 1) continue;
+            if (input.len != 1) {
+                try escseq.Cursor.save(wb);
+                try escseq.Cursor.goto(wb, 0, status_low);
+                try escseq.Erase.line(wb);
+                switch (event) {
+                    .Mouse => |mouse| {
+                        try fmt.format(wb, "ignored chars: mouse {any}", .{mouse});
+                    },
+                    .Ascii => |ascii| {
+                        try fmt.format(wb, "ignored chars: ascii {any}", .{ascii});
+                    },
+                    .Combo => |combo| {
+                        try fmt.format(wb, "ignored chars: combo {any}", .{combo});
+                    },
+                }
+                try escseq.Cursor.restore(wb);
+                continue;
+            }
 
             switch (input[0]) {
                 'q' => break,
                 'j' => {
-                    if (screen_cursor < winsize.row_high) {
+                    if (screen_cursor < screen_high) {
                         screen_cursor += 1;
                         data_cursor += 1;
 
-                        try escseq.Cursor.down(wb, 1);
-                    } else if (screen_cursor == winsize.row_high) {
+                        try escseq.Cursor.nextLine(wb, 1);
+                    } else if (screen_cursor == screen_high) {
                         // need to update the last line
 
                         // screen_cursor no move
@@ -92,6 +122,7 @@ pub fn main() !void {
                             try escseq.Cursor.scrollUp(wb, 1);
                             try escseq.Cursor.goto(wb, 0, screen_cursor);
                             try fmt.format(wb, " {d}", .{data[data_cursor]});
+                            try escseq.Cursor.goto(wb, 0, screen_cursor);
                         } else {
                             unreachable;
                         }
@@ -100,22 +131,24 @@ pub fn main() !void {
                     }
                 },
                 'k' => {
-                    if (screen_cursor > 0) {
+                    const screen_low = 0;
+                    if (screen_cursor > screen_low) {
                         screen_cursor -= 1;
                         data_cursor -= 1;
 
-                        try escseq.Cursor.up(wb, 1);
-                    } else if (screen_cursor == 0) {
+                        try escseq.Cursor.prevLine(wb, 1);
+                    } else if (screen_cursor == screen_low) {
                         // screen_cursor no move
 
                         if (data_cursor == 0) {
                             // begin of data
-                        } else if (data_cursor > 0) {
+                        } else if (data_cursor > screen_low) {
                             data_cursor -= 1;
                             // need to update the first line
                             try escseq.Cursor.scrollDown(wb, 1);
                             try escseq.Cursor.goto(wb, 0, screen_cursor);
                             try fmt.format(wb, " {d}", .{data[data_cursor]});
+                            try escseq.Cursor.goto(wb, 0, screen_cursor);
                         } else {
                             unreachable;
                         }
@@ -124,50 +157,51 @@ pub fn main() !void {
                     }
                 },
 
-                's' => {
-                    try wb.writeAll("~status");
+                'L' => {
+                    // go to the last line of the screen
+                    const gap = screen_high - screen_cursor;
+                    if (gap == 0) {
+                        // stay
+                    } else if (gap > 0) {
+                        screen_cursor = screen_high;
+                        data_cursor += gap;
+                        try escseq.Cursor.goto(wb, 0, screen_cursor);
+                    } else {
+                        unreachable;
+                    }
+                },
+                'H' => {
+                    // go to the first line of the screen
+                    const screen_low = 0;
+                    const gap = screen_cursor - screen_low;
+                    if (gap == 0) {
+                        // stay
+                    } else if (gap > 0) {
+                        screen_cursor = screen_low;
+                        data_cursor -= gap;
+                        try escseq.Cursor.goto(wb, 0, screen_cursor);
+                    } else {
+                        unreachable;
+                    }
+                },
+
+                else => {
                     try escseq.Cursor.save(wb);
-                    try escseq.Cap.toStatusLine(.Tmux, wb);
-                    try wb.writeAll("hello 1/100");
-                    try escseq.Cap.fromStatusLine(wb);
+                    try escseq.Cursor.goto(wb, 0, status_low);
+                    try escseq.Erase.line(wb);
+                    switch (event) {
+                        .Mouse => |mouse| {
+                            try fmt.format(wb, "ignored chars: mouse {any}", .{mouse});
+                        },
+                        .Ascii => |ascii| {
+                            try fmt.format(wb, "ignored chars: ascii {any}", .{ascii});
+                        },
+                        .Combo => |combo| {
+                            try fmt.format(wb, "ignored chars: combo {any}", .{combo});
+                        },
+                    }
                     try escseq.Cursor.restore(wb);
                 },
-
-                'o' => {
-                    // vim O
-                    try escseq.Cap.insertLine(wb);
-                    try escseq.Cursor.goto(wb, 0, screen_cursor);
-                },
-                'd' => {
-                    // vim dd
-                    try escseq.Cap.deleteLine(wb);
-                    try escseq.Cursor.goto(wb, 0, screen_cursor);
-                },
-
-                'J' => {
-                    if (screen_cursor < 10 or screen_cursor > 20) continue;
-
-                    try escseq.Cursor.save(wb);
-                    try escseq.Cap.changeScrollableRegion(wb, 10, 20);
-                    try escseq.Cursor.scrollUp(wb, 1);
-                    try escseq.Cursor.goto(wb, 0, 20);
-                    try wb.writeAll("new line in bottom");
-                    try escseq.Cap.changeScrollableRegion(wb, 0, winsize.row_total);
-                    try escseq.Cursor.restore(wb);
-                },
-                'K' => {
-                    if (screen_cursor < 10 or screen_cursor > 20) continue;
-
-                    try escseq.Cursor.save(wb);
-                    try escseq.Cap.changeScrollableRegion(wb, 10, 20);
-                    try escseq.Cursor.scrollDown(wb, 1);
-                    try escseq.Cursor.goto(wb, 0, 10);
-                    try wb.writeAll("new line in top");
-                    try escseq.Cap.changeScrollableRegion(wb, 0, winsize.row_total);
-                    try escseq.Cursor.restore(wb);
-                },
-
-                else => {},
             }
         }
     }
