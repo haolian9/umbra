@@ -54,19 +54,21 @@ pub const MouseEvent = struct {
     col: u16,
     // 0-based
     row: u16,
-    state: State, // pressed on or off
+    press_state: PressState, // pressed on or off
 
     pub const Btn = enum(u8) {
-        left = 0,
-        mid = 1,
-        right = 2,
-        up = 64,
-        down = 65,
+        Left = 0,
+        Mid = 1,
+        Right = 2,
+        Up = 64,
+        Down = 65,
+        LeftDrag = 32, // 左键拖动
+        RightDrag = 34, // 右键拖动
     };
 
-    pub const State = enum(u8) {
-        on = 'M',
-        off = 'm',
+    pub const PressState = enum(u8) {
+        Down = 'M',
+        Up = 'm',
     };
 
     pub fn fromString(str: []const u8) !MouseEvent {
@@ -81,25 +83,33 @@ pub const MouseEvent = struct {
         else
             return error.invalidButton;
 
-        const col: u16 = (if (it.next()) |code|
-            try fmt.parseInt(u8, code, 10)
-        else
-            return error.invalidColumn) - 1;
+        const col: u16 = blk: {
+            if (it.next()) |code| {
+                const orig = try fmt.parseInt(u8, code, 10);
+                break :blk orig - 1;
+            } else {
+                return error.invalidColumn;
+            }
+        };
 
-        const row: u16 = (if (it.next()) |code|
-            try fmt.parseInt(u8, code, 10)
-        else
-            return error.invalidRow) - 1;
+        const row: u16 = blk: {
+            if (it.next()) |code| {
+                const orig = try fmt.parseInt(u8, code, 10);
+                break :blk orig - 1;
+            } else {
+                return error.invalidRow;
+            }
+        };
 
         assert(it.next() == null);
 
-        const state = @intToEnum(State, str[str.len - 1]);
+        const press_state = @intToEnum(PressState, str[str.len - 1]);
 
         return MouseEvent{
             .btn = btn,
             .col = col,
             .row = row,
-            .state = state,
+            .press_state = press_state,
         };
     }
 };

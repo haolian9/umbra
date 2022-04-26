@@ -8,60 +8,8 @@ const assert = std.debug.assert;
 const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
 const escseq = umbra.escseq;
+const events = umbra.events;
 
-const MouseEvent = struct {
-    btn: Btn,
-    col: u16,
-    row: u16,
-    state: State, // pressed on or off
-
-    const Btn = enum(u8) {
-        left = 0,
-        mid = 1,
-        right = 2,
-        up = 64,
-        down = 65,
-    };
-
-    const State = enum(u8) {
-        on = 'M',
-        off = 'm',
-    };
-
-    fn fromString(str: []const u8) !MouseEvent {
-        // \x1b[<2;98;21m
-        // \x1b[<0;2;3M
-        assert(mem.startsWith(u8, str, "\x1B[<"));
-
-        var it = mem.split(u8, str[3 .. str.len - 1], ";");
-
-        const btn = if (it.next()) |code|
-            @intToEnum(Btn, try fmt.parseInt(u8, code, 10))
-        else
-            return error.invalidButton;
-
-        const col = if (it.next()) |code|
-            try fmt.parseInt(u8, code, 10)
-        else
-            return error.invalidColumn;
-
-        const row = if (it.next()) |code|
-            try fmt.parseInt(u8, code, 10)
-        else
-            return error.invalidRow;
-
-        assert(it.next() == null);
-
-        const state = @intToEnum(State, str[str.len - 1]);
-
-        return MouseEvent{
-            .btn = btn,
-            .col = col,
-            .row = row,
-            .state = state,
-        };
-    }
-};
 
 pub fn inputLoop(tty: *umbra.TTY) !void {
     var buffer: [16]u8 = undefined;
@@ -87,7 +35,7 @@ pub fn inputLoop(tty: *umbra.TTY) !void {
                     'C' => try escseq.Cursor.forward(w, 1),
                     'D' => try escseq.Cursor.back(w, 1),
                     '<' => {
-                        const event = try MouseEvent.fromString(input);
+                        const event = try events.MouseEvent.fromString(input);
                         try w.print("input: mouse: {s}\n", .{event});
                     },
                     else => {},

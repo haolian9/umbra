@@ -1,44 +1,206 @@
 const std = @import("std");
-const print = std.debug.print;
-const fs = std.fs;
-const io = std.io;
+const assert = std.debug.assert;
 const fmt = std.fmt;
+const process = std.process;
+const os = std.os;
+const log = std.log;
+const mem = std.mem;
+const io = std.io;
 
-const umbra = @import("../src/umbra.zig");
+const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
+const escseq = umbra.escseq;
+const events = umbra.events;
+const VideoFiles = umbra.VideoFiles;
+
+const Canvas = umbra.Canvas([]const u8, " {s}");
+
+
+fn play(allocator: mem.Allocator, file: []const u8) !void {
+    const pid = try os.fork();
+    if (pid == 0) {
+        io.getStdIn().close();
+        io.getStdOut().close();
+        io.getStdErr().close();
+        const err = process.execv(allocator, &.{"/usr/bin/mpv", "--mute=yes", file});
+        log.err("spawn mpv failed: {any}", .{err});
+        unreachable;
+    }
+}
+
+fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.CharKeyboardEvent) !void {
+    switch (ev.char) {
+        'q' => return error.Quit,
+        'j' => try canvas.scrollDown(writer),
+        'k' => try canvas.scrollUp(writer),
+
+        'L' => {
+            // go to the last line of the screen
+            const gap = canvas.screen_high - canvas.screen_cursor;
+            if (gap == 0) {
+                // stay
+            } else if (gap > 0) {
+                canvas.screen_cursor = canvas.screen_high;
+                canvas.data_cursor += gap;
+                try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+            } else {
+                unreachable;
+            }
+        },
+        'H' => {
+            // go to the first line of the screen
+            const gap = canvas.screen_cursor - canvas.screen_low;
+            if (gap == 0) {
+                // stay
+            } else if (gap > 0) {
+                canvas.screen_cursor = canvas.screen_low;
+                canvas.data_cursor -= gap;
+                try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+            } else {
+                unreachable;
+            }
+        },
+        'g' => {
+            // go to the first line of the data
+            canvas.screen_cursor = canvas.screen_low;
+            canvas.data_cursor = 0;
+            try canvas.redraw(writer, false);
+            try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+        },
+        'G' => {
+            // go to the last line of the data
+            canvas.screen_cursor = canvas.screen_high;
+            canvas.data_cursor = canvas.data.len - 1;
+            try canvas.redraw(writer, false);
+            try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+        },
+
+        '\r' => {
+            // play the video
+            try play(allocator, canvas.data[canvas.data_cursor]);
+        },
+
+        'r' => {
+            try canvas.redraw(writer, true);
+        },
+
+        else => {
+            try escseq.Cursor.save(writer);
+            try escseq.Cursor.goto(writer, 0, canvas.status_low);
+            try escseq.Erase.line(writer);
+            try fmt.format(writer, "{}", .{ev});
+            try escseq.Cursor.restore(writer);
+        },
+    }
+}
+
+fn handleMouseEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.MouseEvent) !void {
+    switch (ev.btn) {
+        .Up => try canvas.scrollUp(writer),
+        .Down => try canvas.scrollDown(writer),
+        .Left => switch (ev.press_state) {
+            .Down => {},
+            .Up => {
+                if (canvas.screen_cursor == ev.row) {
+                    try play(allocator, canvas.data[canvas.data_cursor]);
+                } else {
+                    canvas.screen_cursor = ev.row;
+                    try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+                }
+            },
+        },
+        else => {
+            try canvas.resetStatusLine(writer, "{any}", .{ev});
+        },
+    }
+}
+
+fn handleRuneKeyboardEvent(writer: anytype, canvas: Canvas, ev: events.RuneKeyboardEvent) !void {
+    try canvas.resetStatusLine(writer, "{any}", .{ev});
+}
 
 pub fn main() !void {
-    print("hello and welcome\n", .{});
-}
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer assert(gpa.deinit() == false);
 
-fn isatty() !void {
-    var file = fs.openFileAbsolute("/dev/tty", .{ .read = true, .write = true }) catch |err| {
-        print("open /dev/tty failed: {}\n", .{err});
-        print("/dev/tty isatty: {}\n", .{false});
-        return;
-    };
-    defer file.close();
-    print("/dev/tty isatty: {}\n", .{std.os.isatty(file.handle)});
-}
+    const allocator = gpa.allocator();
 
-fn buffered() !void {
     var tty = try TTY.init();
     defer tty.deinit();
 
-    var input: [16]u8 = undefined;
-    var bufw = tty.buffered_writer();
-    const wb = bufw.writer();
+    const winsize = try tty.getWinSize();
 
-    try wb.writeAll("hello and welcome");
-    print("w1: #{} >>{s}<<\n", .{ bufw.fifo.buf.len, fmt.fmtSliceEscapeLower(bufw.fifo.buf[0..32]) });
+    var buffer = tty.buffered_writer();
+    defer buffer.flush() catch unreachable;
 
-    try wb.writeAll("django unchained\n");
-    print("w2: #{} >>{s}<<\n", .{ bufw.fifo.buf.len, fmt.fmtSliceEscapeLower(bufw.fifo.buf[0..32]) });
+    const w = tty.writer();
+    const wb = buffer.writer();
 
+    var files = try VideoFiles.fromRoots(allocator, &.{ "/oasis/smaug/final", "/oasis/deluge/sync", "/oasis/deluge/completed" }, null);
+    defer files.deinit();
+
+    var canvas: Canvas = blk: {
+        const status_rows = 1;
+        const screen_high = winsize.row_high - status_rows;
+        const status_low = screen_high + 1;
+
+        break :blk Canvas{
+            .data = files.items,
+            .screen_low = 0,
+            .screen_high = screen_high,
+            .status_low = status_low,
+
+            .data_cursor = 0,
+            .screen_cursor = 0,
+        };
+    };
+
+    // construct frames
+    try escseq.Cap.changeScrollableRegion(w, 0, canvas.screen_high);
+    try escseq.Private.enableMouseInput(w);
+    defer escseq.Private.disableMouseInput(w) catch unreachable;
+
+    // first draw
+    try canvas.redraw(wb, true);
+    try buffer.flush();
+
+    // interact
     {
-        _ = try tty.getInput(&input);
-        try bufw.flush();
-        print("flush: #{} >>{s}<<\n", .{ bufw.fifo.buf.len, fmt.fmtSliceEscapeLower(bufw.fifo.buf[0..32]) });
-        _ = try tty.getInput(&input);
+        defer buffer.flush() catch unreachable;
+
+        try escseq.Cursor.home(w);
+
+        var input_buffer: [16]u8 = undefined;
+
+        while (true) {
+            defer buffer.flush() catch unreachable;
+
+            const event: events.Event = blk: {
+                const n = try tty.getInput(&input_buffer);
+                const input = input_buffer[0..n];
+                break :blk events.Event.fromString(input) catch |err| switch (err) {
+                    // 连续滚动鼠标滚轮，有很大概率会出现这个错误
+                    // 我们目前先忽略掉这个错误
+                    error.InvalidCharacter => continue,
+                    else => return err,
+                };
+            };
+
+            switch (event) {
+                .Mouse => |mouse| {
+                    try handleMouseEvent(allocator, wb, &canvas, mouse);
+                },
+                .Char => |char| {
+                    handleCharKeyboardEvent(allocator, wb, &canvas, char) catch |err| switch (err) {
+                        error.Quit => break,
+                        else => return err,
+                    };
+                },
+                .Rune => |rune| {
+                    try handleRuneKeyboardEvent(wb, canvas, rune);
+                },
+            }
+        }
     }
 }
+

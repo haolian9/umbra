@@ -9,7 +9,92 @@ const fmt = std.fmt;
 const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
 const escseq = umbra.escseq;
-const Event = umbra.events.Event;
+const events = umbra.events;
+
+const Canvas = umbra.Canvas(u16, " {d}");
+
+
+fn handleCharKeyboardEvent(wb: anytype, canvas: *Canvas, ev: events.CharKeyboardEvent) !void {
+    switch (ev.char) {
+        'q' => return error.Quit,
+        'j' => try canvas.scrollDown(wb),
+        'k' => try canvas.scrollUp(wb),
+
+        'L' => {
+            // go to the last line of the screen
+            const gap = canvas.screen_high - canvas.screen_cursor;
+            if (gap == 0) {
+                // stay
+            } else if (gap > 0) {
+                canvas.screen_cursor = canvas.screen_high;
+                canvas.data_cursor += gap;
+                try escseq.Cursor.goto(wb, 0, canvas.screen_cursor);
+            } else {
+                unreachable;
+            }
+        },
+        'H' => {
+            // go to the first line of the screen
+            const gap = canvas.screen_cursor - canvas.screen_low;
+            if (gap == 0) {
+                // stay
+            } else if (gap > 0) {
+                canvas.screen_cursor = canvas.screen_low;
+                canvas.data_cursor -= gap;
+                try escseq.Cursor.goto(wb, 0, canvas.screen_cursor);
+            } else {
+                unreachable;
+            }
+        },
+        'g' => {
+            // go to the first line of the data
+            canvas.screen_cursor = canvas.screen_low;
+            canvas.data_cursor = 0;
+            try canvas.redraw(wb, false);
+            try escseq.Cursor.goto(wb, 0, canvas.screen_cursor);
+        },
+        'G' => {
+            // go to the last line of the data
+            canvas.screen_cursor = canvas.screen_high;
+            canvas.data_cursor = canvas.data.len - 1;
+            try canvas.redraw(wb, false);
+            try escseq.Cursor.goto(wb, 0, canvas.screen_cursor);
+        },
+
+        'r' => {
+            try canvas.redraw(wb, true);
+        },
+
+        else => {
+            try escseq.Cursor.save(wb);
+            try escseq.Cursor.goto(wb, 0, canvas.status_low);
+            try escseq.Erase.line(wb);
+            try fmt.format(wb, "{}", .{ev});
+            try escseq.Cursor.restore(wb);
+        },
+    }
+}
+
+fn handleMouseEvent(wb: anytype, canvas: *Canvas, ev: events.MouseEvent) !void {
+    switch (ev.btn) {
+        .Up => try canvas.scrollUp(wb),
+        .Down => try canvas.scrollDown(wb),
+        .Left => switch (ev.press_state) {
+            .Down => {},
+            .Up => {
+                canvas.screen_cursor = ev.row;
+                try escseq.Cursor.goto(wb, 0, canvas.screen_cursor);
+            },
+        },
+        else => {
+            try canvas.resetStatusLine(wb, "{any}", .{ev});
+        },
+    }
+}
+
+fn handleRuneKeyboardEvent(wb: anytype, canvas: Canvas, ev: events.RuneKeyboardEvent) !void {
+    try canvas.resetStatusLine(wb, "{any}", .{ev});
+}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -40,147 +125,65 @@ pub fn main() !void {
     };
     defer allocator.free(data);
 
-    const status_rows = 1;
-    const screen_high = winsize.row_high - status_rows;
-    const status_low = screen_high + 1;
+    var canvas: Canvas = blk: {
+        const status_rows = 1;
+        const screen_high = winsize.row_high - status_rows;
+        const status_low = screen_high + 1;
+
+        break :blk Canvas{
+            .data = data,
+            .screen_low = 0,
+            .screen_high = screen_high,
+            .status_low = status_low,
+
+            .data_cursor = 0,
+            .screen_cursor = 0,
+        };
+    };
 
     // construct frames
-    try escseq.Cap.changeScrollableRegion(w, 0, winsize.row_high - status_rows);
+    try escseq.Cap.changeScrollableRegion(w, 0, canvas.screen_high);
     try escseq.Private.enableMouseInput(w);
     defer escseq.Private.disableMouseInput(w) catch unreachable;
 
     // first draw
-    {
-        defer buffer.flush() catch unreachable;
-
-        try escseq.Cursor.home(wb);
-        defer escseq.Cursor.home(wb) catch unreachable;
-
-        for (data[0 .. screen_high + 1]) |i| {
-            try escseq.Cursor.goto(wb, 0, i);
-            try wb.print(" {}", .{i});
-        }
-        try escseq.Cursor.goto(wb, 0, status_low);
-        try wb.print("total: {}", .{data.len});
-    }
+    try canvas.redraw(wb, true);
+    try buffer.flush();
 
     // interact
     {
         defer buffer.flush() catch unreachable;
 
-        var screen_cursor: u16 = 0;
-        var data_cursor: usize = 0;
-        var input_buffer: [16]u8 = undefined;
-
         try escseq.Cursor.home(w);
+
+        var input_buffer: [16]u8 = undefined;
 
         while (true) {
             defer buffer.flush() catch unreachable;
 
-            const input = blk: {
+            const event: events.Event = blk: {
                 const n = try tty.getInput(&input_buffer);
-                break :blk input_buffer[0..n];
+                const input = input_buffer[0..n];
+                break :blk events.Event.fromString(input) catch |err| switch (err) {
+                    // 连续滚动鼠标滚轮，有很大概率会出现这个错误
+                    // 我们目前先忽略掉这个错误
+                    error.InvalidCharacter => continue,
+                    else => return err,
+                };
             };
-            const event = try Event.fromString(input);
 
-            if (input.len != 1) {
-                try escseq.Cursor.save(wb);
-                try escseq.Cursor.goto(wb, 0, status_low);
-                try escseq.Erase.line(wb);
-                try fmt.format(wb, "{}", .{event});
-                try escseq.Cursor.restore(wb);
-                continue;
-            }
-
-            switch (input[0]) {
-                'q' => break,
-                'j' => {
-                    if (screen_cursor < screen_high) {
-                        screen_cursor += 1;
-                        data_cursor += 1;
-
-                        try escseq.Cursor.nextLine(wb, 1);
-                    } else if (screen_cursor == screen_high) {
-                        // need to update the last line
-
-                        // screen_cursor no move
-                        const data_high = data.len - 1;
-                        if (data_cursor == data_high) {
-                            // end of data
-                        } else if (data_cursor < data_high) {
-                            data_cursor += 1;
-                            try escseq.Cursor.scrollUp(wb, 1);
-                            try escseq.Cursor.goto(wb, 0, screen_cursor);
-                            try fmt.format(wb, " {d}", .{data[data_cursor]});
-                            try escseq.Cursor.goto(wb, 0, screen_cursor);
-                        } else {
-                            unreachable;
-                        }
-                    } else {
-                        unreachable;
-                    }
+            switch (event) {
+                .Mouse => |mouse| {
+                    try handleMouseEvent(wb, &canvas, mouse);
                 },
-                'k' => {
-                    const screen_low = 0;
-                    if (screen_cursor > screen_low) {
-                        screen_cursor -= 1;
-                        data_cursor -= 1;
-
-                        try escseq.Cursor.prevLine(wb, 1);
-                    } else if (screen_cursor == screen_low) {
-                        // screen_cursor no move
-
-                        if (data_cursor == 0) {
-                            // begin of data
-                        } else if (data_cursor > screen_low) {
-                            data_cursor -= 1;
-                            // need to update the first line
-                            try escseq.Cursor.scrollDown(wb, 1);
-                            try escseq.Cursor.goto(wb, 0, screen_cursor);
-                            try fmt.format(wb, " {d}", .{data[data_cursor]});
-                            try escseq.Cursor.goto(wb, 0, screen_cursor);
-                        } else {
-                            unreachable;
-                        }
-                    } else {
-                        unreachable;
-                    }
+                .Char => |char| {
+                    handleCharKeyboardEvent(wb, &canvas, char) catch |err| switch (err) {
+                        error.Quit => break,
+                        else => return err,
+                    };
                 },
-
-                'L' => {
-                    // go to the last line of the screen
-                    const gap = screen_high - screen_cursor;
-                    if (gap == 0) {
-                        // stay
-                    } else if (gap > 0) {
-                        screen_cursor = screen_high;
-                        data_cursor += gap;
-                        try escseq.Cursor.goto(wb, 0, screen_cursor);
-                    } else {
-                        unreachable;
-                    }
-                },
-                'H' => {
-                    // go to the first line of the screen
-                    const screen_low = 0;
-                    const gap = screen_cursor - screen_low;
-                    if (gap == 0) {
-                        // stay
-                    } else if (gap > 0) {
-                        screen_cursor = screen_low;
-                        data_cursor -= gap;
-                        try escseq.Cursor.goto(wb, 0, screen_cursor);
-                    } else {
-                        unreachable;
-                    }
-                },
-
-                else => {
-                    try escseq.Cursor.save(wb);
-                    try escseq.Cursor.goto(wb, 0, status_low);
-                    try escseq.Erase.line(wb);
-                    try fmt.format(wb, "{}", .{event});
-                    try escseq.Cursor.restore(wb);
+                .Rune => |rune| {
+                    try handleRuneKeyboardEvent(wb, canvas, rune);
                 },
             }
         }
