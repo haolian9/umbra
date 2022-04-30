@@ -1,0 +1,2 @@
+// directories that contains video files.
+pub const roots = [_][]const u8{ "/oasis/smaug/final", "/oasis/deluge/sync", "/oasis/deluge/completed" };

@@ -5,3 +5,6 @@ zig-cache/
 !/src/
 !*.zig
 !*.md
+
+/config.zig
+!/config.zig.example
