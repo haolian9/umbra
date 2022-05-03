@@ -1,21 +1,19 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const fmt = std.fmt;
-const process = std.process;
 const os = std.os;
 const mem = std.mem;
 const io = std.io;
 const linux = std.os.linux;
 const logger = std.log;
 const fs = std.fs;
+const builtin = @import("builtin");
 
 const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
 const escseq = umbra.escseq;
 const events = umbra.events;
 const VideoFiles = umbra.VideoFiles;
-
-const config = @import("./config.zig");
 
 const Canvas = umbra.Canvas([]const u8, " {s}");
 
@@ -80,18 +78,43 @@ fn handleSIGWINCH(_: c_int) callconv(.C) void {
     handleResize() catch unreachable;
 }
 
+fn handleSIGCHLD(_: c_int) callconv(.C) void {
+    const r = os.waitpid(-1, linux.W.NOHANG);
+    logger.debug("SIGCHILD: waitpid: {any}", .{r});
+}
+
 /// mpv ignores SIGHUP, after the main exits, pid 1 will be it's parent.
 /// and that's ok.
-fn play(allocator: mem.Allocator, file: []const u8) !void {
+fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
+    const argv: []const []const u8 = &.{ "/usr/bin/mpv", file };
+
+    // stole from std.ChildProcess.spawnPosix
+    var arena_allocator = std.heap.ArenaAllocator.init(allocator);
+    defer arena_allocator.deinit();
+    const arena = arena_allocator.allocator();
+
+    const argv_buf = try arena.allocSentinel(?[*:0]u8, argv.len, null);
+    for (argv) |arg, i| argv_buf[i] = (try arena.dupeZ(u8, arg)).ptr;
+
+    const envp = if (builtin.output_mode == .Exe)
+        @ptrCast([*:null]?[*:0]u8, os.environ.ptr)
+    else
+        unreachable;
+
     const pid = try os.fork();
+
     if (pid == 0) {
-        io.getStdIn().close();
-        io.getStdOut().close();
-        io.getStdErr().close();
-        const err = process.execv(allocator, &.{ "/usr/bin/mpv", "--mute=yes", file });
-        logger.err("spawn mpv failed: {any}", .{err});
+        os.close(0);
+        os.close(1);
+        os.close(2);
+        const err = os.execvpeZ_expandArg0(.no_expand, argv_buf.ptr[0].?, argv_buf.ptr, envp);
+        logger.err("failed to exec: {s}", .{err});
         unreachable;
     }
+
+    logger.debug("playing {s}", .{file});
+
+    return pid;
 }
 
 fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.CharKeyboardEvent) !void {
@@ -139,7 +162,7 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
 
         '\r' => {
             // play the video
-            try play(allocator, canvas.data[canvas.data_cursor]);
+            _ = try play(allocator, canvas.data[canvas.data_cursor]);
         },
 
         'r' => {
@@ -164,21 +187,37 @@ fn handleMouseEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, 
             .Down => {},
             .Up => {
                 if (canvas.screen_cursor == ev.row) {
-                    try play(allocator, canvas.data[canvas.data_cursor]);
+                    _ = try play(allocator, canvas.data[canvas.data_cursor]);
+                } else if (ev.row < canvas.screen_high) {
+                    if (ev.row < canvas.screen_cursor) {
+                        const gap = canvas.screen_cursor - ev.row;
+                        canvas.screen_cursor -= gap;
+                        canvas.data_cursor -= gap;
+                        try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+                    } else if (ev.row > canvas.screen_cursor) {
+                        const gap = ev.row - canvas.screen_cursor;
+                        canvas.screen_cursor += gap;
+                        canvas.data_cursor += gap;
+                        try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+                    } else {
+                        // stay
+                    }
                 } else {
-                    canvas.screen_cursor = ev.row;
-                    try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
+                    // out of screen, leave it
                 }
             },
         },
         else => {
-            try canvas.resetStatusLine(writer, "{any}", .{ev});
+            // try canvas.resetStatusLine(writer, "{any}", .{ev});
         },
     }
 }
 
 fn handleRuneKeyboardEvent(writer: anytype, canvas: Canvas, ev: events.RuneKeyboardEvent) !void {
-    try canvas.resetStatusLine(writer, "{any}", .{ev});
+    _ = writer;
+    _ = canvas;
+    _ = ev;
+    // try canvas.resetStatusLine(writer, "{any}", .{ev});
 }
 
 pub fn main() !void {
@@ -193,7 +232,7 @@ pub fn main() !void {
         const writer = stream.writer();
         try fmt.format(writer, "/tmp/{d}-umbra.log", .{linux.getuid()});
         const path = buffer[0..stream.pos];
-        var file = try fs.createFileAbsolute(path, .{.truncate = false});
+        var file = try fs.createFileAbsolute(path, .{});
         LOGFILE = file;
     }
     defer LOGFILE.?.close();
@@ -207,7 +246,7 @@ pub fn main() !void {
     const w = tty.writer();
     const wb = buffer.writer();
 
-    var files = try VideoFiles.fromRoots(allocator, &config.roots, null);
+    var files = try VideoFiles.fromRoots(allocator, &.{ "/oasis/smaug/final", "/oasis/deluge/sync", "/oasis/deluge/completed" }, null);
     defer files.deinit();
 
     var canvas: Canvas = blk: {
@@ -227,11 +266,6 @@ pub fn main() !void {
         };
     };
 
-    // construct frames
-    try escseq.Cap.changeScrollableRegion(w, 0, canvas.screen_high);
-    try escseq.Private.enableMouseInput(w);
-    defer escseq.Private.disableMouseInput(w) catch unreachable;
-
     SIGCTX = &.{ .canvas = &canvas, .tty = &tty };
     logger.debug("register SIGCTX?{s}", .{SIGCTX != null});
     var act_winch: linux.Sigaction = undefined;
@@ -239,6 +273,18 @@ pub fn main() !void {
     act_winch.handler.handler = handleSIGWINCH;
     act_winch.handler.sigaction = null;
     os.sigaction(linux.SIG.WINCH, &act_winch, null);
+
+    // todo seems signal did not work
+    var act_chld: linux.Sigaction = undefined;
+    os.sigaction(linux.SIG.CHLD, null, &act_chld);
+    act_chld.handler.handler = handleSIGCHLD;
+    act_chld.handler.sigaction = null;
+    os.sigaction(linux.SIG.CHLD, &act_chld, null);
+
+    // construct frames
+    try escseq.Cap.changeScrollableRegion(w, 0, canvas.screen_high);
+    try escseq.Private.enableMouseInput(w);
+    defer escseq.Private.disableMouseInput(w) catch unreachable;
 
     // first draw
     try canvas.redraw(wb, true);
@@ -259,8 +305,7 @@ pub fn main() !void {
                 const n = try tty.getInput(&input_buffer);
                 const input = input_buffer[0..n];
                 break :blk events.Event.fromString(input) catch |err| switch (err) {
-                    // 连续滚动鼠标滚轮，有很大概率会出现这个错误
-                    // 我们目前先忽略掉这个错误
+                    // 连续滚动鼠标滚轮，有很大概率会出现这个错误, 目前先忽略掉
                     error.InvalidCharacter => continue,
                     else => return err,
                 };
@@ -280,6 +325,8 @@ pub fn main() !void {
                     try handleRuneKeyboardEvent(wb, canvas, rune);
                 },
             }
+
+            try canvas.resetStatusLine(wb, "data: {}/{}; screen: {}/{}", .{ canvas.data_cursor, canvas.data.len - 1, canvas.screen_cursor, canvas.screen_high });
         }
     }
 }

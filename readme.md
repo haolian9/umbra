@@ -25,4 +25,4 @@ goals/limits:
 * no filesystem modification: rm, mv ...
 * configurable color for basename
 * sort by directory, then mtime or size or nature
-* fore/back buffer for delta rendering
+* ~~fore/back buffer for delta rendering~~

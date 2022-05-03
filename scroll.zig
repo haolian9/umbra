@@ -13,7 +13,6 @@ const events = umbra.events;
 
 const Canvas = umbra.Canvas(u16, " {d}");
 
-
 fn handleCharKeyboardEvent(wb: anytype, canvas: *Canvas, ev: events.CharKeyboardEvent) !void {
     switch (ev.char) {
         'q' => return error.Quit,
