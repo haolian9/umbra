@@ -28,5 +28,5 @@ goals/limits:
 * ~~fore/back buffer for delta rendering~~
 
 todo:
-* line overflow
-* trash which should be located in the same patition with file to be deleted
+* ~~line overflow~~
+* the dir of trash should respect the partition of file to be deleted
