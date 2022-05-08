@@ -1,5 +1,6 @@
 const std = @import("std");
 const fmt = std.fmt;
+const log = std.log;
 
 const escseq = @import("./escseq.zig");
 
@@ -25,9 +26,9 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
             try escseq.Cursor.home(wb);
 
             const data_low = self.data_cursor - (self.screen_cursor - self.screen_low);
-            const data_high = self.data_cursor + (self.screen_high - self.screen_cursor);
+            const data_stop = self.data_cursor + (self.screen_high - self.screen_cursor);
             var data_cursor: u16 = 0;
-            for (self.data[data_low .. data_high + 1]) |item| {
+            for (self.data[data_low..data_stop]) |item| {
                 if (data_cursor != 0) {
                     try wb.writeAll("\n");
                 }
@@ -73,10 +74,16 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
 
         pub fn scrollDown(self: *Self, wb: anytype) !void {
             if (self.screen_cursor < self.screen_high) {
-                self.screen_cursor += 1;
-                self.data_cursor += 1;
-
-                try escseq.Cursor.nextLine(wb, 1);
+                const data_high = self.data.len - 1;
+                if (self.data_cursor == data_high) {
+                    // end of data, can not go further
+                } else if (self.data_cursor < data_high) {
+                    self.screen_cursor += 1;
+                    self.data_cursor += 1;
+                    try escseq.Cursor.nextLine(wb, 1);
+                } else {
+                    unreachable;
+                }
             } else if (self.screen_cursor == self.screen_high) {
                 // need to update the last line
 
