@@ -171,12 +171,12 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
 
         'd', 'h' => {
             const old = canvas.data[canvas.data_cursor];
-            const new = try fs.path.join(allocator, &.{config.trash_dir, fs.path.basename(old)});
+            const new = try fs.path.join(allocator, &.{ config.trash_dir, fs.path.basename(old) });
             defer allocator.free(new);
 
-            logger.debug("mv {s} {s}", .{old, new});
+            logger.debug("mv {s} {s}", .{ old, new });
             fs.renameAbsolute(old, new) catch |err| {
-                logger.err("failed to mv {s} {s}; err: {any}", .{old, new, err});
+                logger.err("failed to mv {s} {s}; err: {any}", .{ old, new, err });
             };
 
             // todo@hl
@@ -290,20 +290,21 @@ pub fn main() !void {
         };
     };
 
-    SIGCTX = &.{ .canvas = &canvas, .tty = &tty };
-    logger.debug("register SIGCTX?{s}", .{SIGCTX != null});
-    var act_winch: linux.Sigaction = undefined;
-    os.sigaction(linux.SIG.WINCH, null, &act_winch);
-    act_winch.handler.handler = handleSIGWINCH;
-    act_winch.handler.sigaction = null;
-    os.sigaction(linux.SIG.WINCH, &act_winch, null);
+    {
+        var act_chld: linux.Sigaction = undefined;
+        os.sigaction(linux.SIG.CHLD, null, &act_chld);
+        act_chld.handler.handler = handleSIGCHLD;
+        // why?
+        // act_chld.handler.sigaction = null;
+        os.sigaction(linux.SIG.CHLD, &act_chld, null);
 
-    // todo seems signal did not work
-    var act_chld: linux.Sigaction = undefined;
-    os.sigaction(linux.SIG.CHLD, null, &act_chld);
-    act_chld.handler.handler = handleSIGCHLD;
-    act_chld.handler.sigaction = null;
-    os.sigaction(linux.SIG.CHLD, &act_chld, null);
+        SIGCTX = &.{ .canvas = &canvas, .tty = &tty };
+        logger.debug("register SIGCTX?{s}", .{SIGCTX != null});
+        var act_winch: linux.Sigaction = undefined;
+        os.sigaction(linux.SIG.WINCH, null, &act_winch);
+        act_winch.handler.handler = handleSIGWINCH;
+        os.sigaction(linux.SIG.WINCH, &act_winch, null);
+    }
 
     // construct frames
     try escseq.Cap.changeScrollableRegion(w, 0, canvas.screen_high);
