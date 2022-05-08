@@ -6,6 +6,7 @@ pub fn build(b: *Builder) void {
     const output_dir = b.pathJoin(&.{b.env_map.get("HOME").?, "bin"});
 
     const exe = b.addExecutable("umbra", "main.zig");
+    exe.addPackagePath("cli", "cli/cli.zig");
     exe.setBuildMode(mode);
     exe.setOutputDir(output_dir);
     exe.strip = true;

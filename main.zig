@@ -8,12 +8,15 @@ const linux = std.os.linux;
 const logger = std.log;
 const fs = std.fs;
 const builtin = @import("builtin");
+const process = std.process;
 
 const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
 const escseq = umbra.escseq;
 const events = umbra.events;
 const VideoFiles = umbra.VideoFiles;
+
+const config = @import("./config.zig");
 
 const Canvas = umbra.Canvas([]const u8, " {s}");
 
@@ -22,7 +25,7 @@ const SigCtx = struct {
     tty: *TTY,
 };
 
-var LOGFILE: ?fs.File = null;
+var LOGWRITER: fs.File.Writer = undefined;
 
 pub fn log(
     comptime level: std.log.Level,
@@ -33,10 +36,7 @@ pub fn log(
     _ = scope;
     const prefix = "[" ++ level.asText() ++ "] ";
 
-    if (LOGFILE) |file| {
-        const writer = file.writer();
-        nosuspend writer.print(prefix ++ format ++ "\n", args) catch unreachable;
-    }
+    nosuspend LOGWRITER.print(prefix ++ format ++ "\n", args) catch unreachable;
 }
 
 var SIGCTX: ?*SigCtx = null;
@@ -220,22 +220,99 @@ fn handleRuneKeyboardEvent(writer: anytype, canvas: Canvas, ev: events.RuneKeybo
     // try canvas.resetStatusLine(writer, "{any}", .{ev});
 }
 
+fn createLogwriter() !fs.File.Writer {
+    var buffer: [fs.MAX_PATH_BYTES]u8 = undefined;
+    var stream = io.FixedBufferStream([]u8){ .buffer = &buffer, .pos = 0 };
+    const writer = stream.writer();
+    try fmt.format(writer, "/tmp/{d}-umbra.log", .{linux.getuid()});
+    const path = buffer[0..stream.pos];
+    var file = try fs.createFileAbsolute(path, .{});
+    return file.writer();
+}
+
+const Roots = struct {
+    allocator: mem.Allocator,
+    // allocated by self.allocator
+    tape: []const u8,
+    // allocated by self.allocator
+    items: []const []const u8,
+
+    const Self = @This();
+
+    fn deinit(self: Self) void {
+        self.allocator.free(self.items);
+        self.allocator.free(self.tape);
+    }
+};
+
+// Roots.deinit() must be honored.
+fn gatherRootsFromArgs(allocator: mem.Allocator) !?Roots {
+    if (os.argv.len < 2) return null;
+
+    const list = blk: {
+        var list = std.ArrayList(u8).init(allocator);
+        errdefer list.deinit();
+
+        var buffer: [fs.MAX_PATH_BYTES]u8 = undefined;
+        var it = process.ArgIteratorPosix.init();
+        _ = it.skip(); // skip the program name itself.
+        while (it.next()) |path| {
+            const real = try os.realpath(path, &buffer);
+            assert(!mem.containsAtLeast(u8, real, 1, "\x00"));
+            try list.appendSlice(real);
+            try list.append('\x00');
+        }
+        break :blk list.toOwnedSlice();
+    };
+    errdefer allocator.free(list);
+
+    const roots = blk: {
+        var roots = std.ArrayList([]const u8).init(allocator);
+        errdefer roots.deinit();
+
+        var start: usize = 0;
+        for (list) |char, stop| {
+            if (char == '\x00') {
+                try roots.append(list[start..stop]);
+                start = stop + 1;
+            }
+        }
+
+        break :blk roots.toOwnedSlice();
+    };
+
+    return Roots{
+        .allocator = allocator,
+        .tape = list,
+        .items = roots,
+    };
+}
+
 pub fn main() !void {
+    LOGWRITER = io.getStdErr().writer();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer assert(gpa.deinit() == false);
 
     const allocator = gpa.allocator();
 
-    {
-        var buffer: [fs.MAX_PATH_BYTES]u8 = undefined;
-        var stream = io.FixedBufferStream([]u8){ .buffer = &buffer, .pos = 0 };
-        const writer = stream.writer();
-        try fmt.format(writer, "/tmp/{d}-umbra.log", .{linux.getuid()});
-        const path = buffer[0..stream.pos];
-        var file = try fs.createFileAbsolute(path, .{});
-        LOGFILE = file;
+    var maybe_roots = try gatherRootsFromArgs(allocator);
+    defer if (maybe_roots) |roots| roots.deinit();
+
+    const roots = if (maybe_roots) |roots| roots.items else &config.roots;
+    var files = try VideoFiles.fromRoots(allocator, roots, null);
+    defer files.deinit();
+
+    if (files.items.len < 1) {
+        logger.info("no videos found", .{});
+        return;
     }
-    defer LOGFILE.?.close();
+
+    LOGWRITER = try createLogwriter();
+    defer {
+        LOGWRITER.context.close();
+        LOGWRITER = io.getStdErr().writer();
+    }
 
     var tty = try TTY.init();
     defer tty.deinit();
@@ -245,9 +322,6 @@ pub fn main() !void {
 
     const w = tty.writer();
     const wb = buffer.writer();
-
-    var files = try VideoFiles.fromRoots(allocator, &.{ "/oasis/smaug/final", "/oasis/deluge/sync", "/oasis/deluge/completed" }, null);
-    defer files.deinit();
 
     var canvas: Canvas = blk: {
         const winsize = try tty.getWinSize();

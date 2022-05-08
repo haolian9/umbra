@@ -32,9 +32,6 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
                 try wb.print(item_format, .{item});
                 data_cursor += 1;
             }
-
-            try escseq.Cursor.goto(wb, 0, self.status_low);
-            try wb.print("total: {}; data.[low={d},high={d}]", .{ self.data.len, data_low, data_high });
         }
 
         pub fn resetStatusLine(self: Self, writer: anytype, comptime format: []const u8, args: anytype) !void {

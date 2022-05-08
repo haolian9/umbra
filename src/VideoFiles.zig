@@ -2,9 +2,10 @@ const std = @import("std");
 const fs = std.fs;
 const mem = std.mem;
 const rand = std.rand;
+const assert = std.debug.assert;
 
-toc: Toc,
-names: Names,
+allocator: mem.Allocator,
+tape: []const u8,
 items: []const []const u8,
 
 const sentinel = '\x00';
@@ -12,61 +13,70 @@ const sentinel = '\x00';
 const Self = @This();
 const VideoFiles = Self;
 
-pub const Toc = std.ArrayList([]const u8);
-pub const Names = std.ArrayList(u8);
-
-pub fn init(toc: Toc, names: Names) VideoFiles{
+pub fn init(allocator: mem.Allocator, tape: []const u8, items: []const []const u8) VideoFiles{
     return VideoFiles {
-        .toc = toc,
-        .names = names,
-        .items = toc.items[0..],
+        .allocator = allocator,
+        .tape = tape,
+        .items = items,
     };
 }
 
 pub fn deinit(self: Self) void {
-    self.toc.deinit();
-    self.names.deinit();
+    self.allocator.free(self.tape);
+    self.allocator.free(self.items);
 }
 
 /// VideoFiles.deinit() should be called eventually.
 pub fn fromRoots(allocator: mem.Allocator, roots: []const []const u8, random: ?rand.Random) !VideoFiles {
-    var names = Names.init(allocator);
-    errdefer names.deinit();
+    const tape = blk: {
+        var list = std.ArrayList(u8).init(allocator);
+        errdefer list.deinit();
 
-    for (roots) |root| {
-        var dir = try fs.openDirAbsolute(root, .{ .iterate = true });
-        defer dir.close();
+        for (roots) |root| {
+            var dir = try fs.openDirAbsolute(root, .{ .iterate = true });
+            defer dir.close();
 
-        var it = try dir.walk(allocator);
-        defer it.deinit();
+            var it = try dir.walk(allocator);
+            defer it.deinit();
 
-        while (try it.next()) |entry| {
-            if (entry.kind != fs.File.Kind.File) continue;
-            if (!mem.endsWith(u8, entry.basename, ".mp4")) continue;
+            while (try it.next()) |entry| {
+                if (entry.kind != fs.File.Kind.File) continue;
+                if (!mem.endsWith(u8, entry.basename, ".mp4")) continue;
 
-            const path = try fs.path.join(allocator, &.{ root, entry.path });
-            defer allocator.free(path);
+                const path = try fs.path.join(allocator, &.{ root, entry.path });
+                defer allocator.free(path);
 
-            try names.appendSlice(path);
-            try names.append(sentinel);
+                assert(!mem.containsAtLeast(u8, path, 1, &[1]u8{sentinel}));
+                try list.appendSlice(path);
+                try list.append(sentinel);
+            }
         }
-    }
 
-    var toc = Toc.init(allocator);
-    errdefer toc.deinit();
+        break :blk list.toOwnedSlice();
+    };
+    errdefer allocator.free(tape);
 
-    var start: usize = 0;
-    for (names.items) |char, index| {
-        if (char == sentinel) {
-            const stop = index;
-            try toc.append(names.items[start..stop]);
-            start = stop + 1;
+    const toc = blk: {
+        var list = std.ArrayList([]const u8).init(allocator);
+        errdefer list.deinit();
+
+        var start: usize = 0;
+        for (tape) |char, stop| {
+            if (char == sentinel) {
+                try list.append(tape[start..stop]);
+                start = stop + 1;
+            }
         }
-    }
 
-    if (random) |r| {
-        r.shuffle([]const u8, toc.items);
-    }
+        const items = list.toOwnedSlice();
 
-    return VideoFiles.init(toc, names);
+        if (random) |r| {
+            r.shuffle([]const u8, items);
+        }
+
+        break :blk items;
+    };
+    errdefer allocator.free(toc);
+
+    return VideoFiles.init(allocator, tape, toc);
 }
