@@ -26,7 +26,7 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
             try escseq.Cursor.home(wb);
 
             const data_low: usize = self.data_cursor - (self.screen_cursor - self.screen_low);
-            const data_stop: usize = @minimum(self.data_cursor + (self.screen_high - self.screen_cursor), self.data.len);
+            const data_stop: usize = @minimum(self.data_cursor + (self.screen_high - self.screen_cursor) + 1, self.data.len);
             var data_cursor: u16 = 0;
             for (self.data[data_low..data_stop]) |item| {
                 if (data_cursor != 0) {
