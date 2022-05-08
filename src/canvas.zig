@@ -9,6 +9,8 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
         screen_low: u16,
         screen_high: u16,
         status_low: u16,
+        /// ascii: 1, utf-8: 3
+        item_width: u16,
 
         data_cursor: usize,
         screen_cursor: u16,
@@ -29,7 +31,7 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
                 if (data_cursor != 0) {
                     try wb.writeAll("\n");
                 }
-                try wb.print(item_format, .{item});
+                try wb.print(item_format, .{self.wrapItem(item)});
                 data_cursor += 1;
             }
         }
@@ -58,7 +60,8 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
                     // need to update the first line
                     try escseq.Cursor.scrollDown(wb, 1);
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
-                    try fmt.format(wb, item_format, .{self.data[self.data_cursor]});
+                    const item = self.data[self.data_cursor];
+                    try fmt.format(wb, item_format, .{self.wrapItem(item)});
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
                 } else {
                     unreachable;
@@ -85,7 +88,8 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
                     self.data_cursor += 1;
                     try escseq.Cursor.scrollUp(wb, 1);
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
-                    try fmt.format(wb, item_format, .{self.data[self.data_cursor]});
+                    const item = self.data[self.data_cursor];
+                    try fmt.format(wb, item_format, .{self.wrapItem(item)});
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
                 } else {
                     unreachable;
@@ -93,6 +97,12 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
             } else {
                 unreachable;
             }
+        }
+
+        // should respect type of data's element
+        fn wrapItem(self: Self, item: []const u8) []const u8 {
+            const start = if (item.len < self.item_width) 0 else item.len - self.item_width;
+            return item[start..];
         }
     };
 }

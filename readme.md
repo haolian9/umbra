@@ -22,7 +22,11 @@ goals/limits:
 * able to read files from stdin: `find | umbra`
 * no async
 * no multi-process
-* no filesystem modification: rm, mv ...
+* no filesystem modification: rm, mv ... (except trash)
 * configurable color for basename
 * sort by directory, then mtime or size or nature
 * ~~fore/back buffer for delta rendering~~
+
+todo:
+* line overflow
+* trash which should be located in the same patition with file to be deleted

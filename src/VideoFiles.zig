@@ -21,7 +21,7 @@ pub fn init(allocator: mem.Allocator, tape: []const u8, items: []const []const u
     };
 }
 
-pub fn deinit(self: Self) void {
+pub fn deinit(self: *Self) void {
     self.allocator.free(self.tape);
     self.allocator.free(self.items);
 }

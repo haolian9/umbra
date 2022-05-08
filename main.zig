@@ -8,13 +8,13 @@ const linux = std.os.linux;
 const logger = std.log;
 const fs = std.fs;
 const builtin = @import("builtin");
-const process = std.process;
 
 const umbra = @import("./src/umbra.zig");
 const TTY = umbra.TTY;
+const VideoFiles = umbra.VideoFiles;
 const escseq = umbra.escseq;
 const events = umbra.events;
-const VideoFiles = umbra.VideoFiles;
+const cli_args = umbra.cli_args;
 
 const config = @import("./config.zig");
 
@@ -160,7 +160,7 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
             try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
         },
 
-        '\r' => {
+        '\r', 'l' => {
             // play the video
             _ = try play(allocator, canvas.data[canvas.data_cursor]);
         },
@@ -169,13 +169,22 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
             try handleResize();
         },
 
-        else => {
-            try escseq.Cursor.save(writer);
-            try escseq.Cursor.goto(writer, 0, canvas.status_low);
-            try escseq.Erase.line(writer);
-            try fmt.format(writer, "{}", .{ev});
-            try escseq.Cursor.restore(writer);
+        'd', 'h' => {
+            const old = canvas.data[canvas.data_cursor];
+            const new = try fs.path.join(allocator, &.{config.trash_dir, fs.path.basename(old)});
+            defer allocator.free(new);
+
+            logger.debug("mv {s} {s}", .{old, new});
+            fs.renameAbsolute(old, new) catch |err| {
+                logger.err("failed to mv {s} {s}; err: {any}", .{old, new, err});
+            };
+
+            // todo@hl
+            // * remove the file from the canvas.data
+            // * redraw the canvas
         },
+
+        else => {},
     }
 }
 
@@ -222,70 +231,9 @@ fn handleRuneKeyboardEvent(writer: anytype, canvas: Canvas, ev: events.RuneKeybo
 
 fn createLogwriter() !fs.File.Writer {
     var buffer: [fs.MAX_PATH_BYTES]u8 = undefined;
-    var stream = io.FixedBufferStream([]u8){ .buffer = &buffer, .pos = 0 };
-    const writer = stream.writer();
-    try fmt.format(writer, "/tmp/{d}-umbra.log", .{linux.getuid()});
-    const path = buffer[0..stream.pos];
+    const path = try fmt.bufPrint(buffer[0..], "/tmp/{d}-umbra.log", .{linux.getuid()});
     var file = try fs.createFileAbsolute(path, .{});
     return file.writer();
-}
-
-const Roots = struct {
-    allocator: mem.Allocator,
-    // allocated by self.allocator
-    tape: []const u8,
-    // allocated by self.allocator
-    items: []const []const u8,
-
-    const Self = @This();
-
-    fn deinit(self: Self) void {
-        self.allocator.free(self.items);
-        self.allocator.free(self.tape);
-    }
-};
-
-// Roots.deinit() must be honored.
-fn gatherRootsFromArgs(allocator: mem.Allocator) !?Roots {
-    if (os.argv.len < 2) return null;
-
-    const list = blk: {
-        var list = std.ArrayList(u8).init(allocator);
-        errdefer list.deinit();
-
-        var buffer: [fs.MAX_PATH_BYTES]u8 = undefined;
-        var it = process.ArgIteratorPosix.init();
-        _ = it.skip(); // skip the program name itself.
-        while (it.next()) |path| {
-            const real = try os.realpath(path, &buffer);
-            assert(!mem.containsAtLeast(u8, real, 1, "\x00"));
-            try list.appendSlice(real);
-            try list.append('\x00');
-        }
-        break :blk list.toOwnedSlice();
-    };
-    errdefer allocator.free(list);
-
-    const roots = blk: {
-        var roots = std.ArrayList([]const u8).init(allocator);
-        errdefer roots.deinit();
-
-        var start: usize = 0;
-        for (list) |char, stop| {
-            if (char == '\x00') {
-                try roots.append(list[start..stop]);
-                start = stop + 1;
-            }
-        }
-
-        break :blk roots.toOwnedSlice();
-    };
-
-    return Roots{
-        .allocator = allocator,
-        .tape = list,
-        .items = roots,
-    };
 }
 
 pub fn main() !void {
@@ -296,7 +244,7 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    var maybe_roots = try gatherRootsFromArgs(allocator);
+    var maybe_roots = try cli_args.gatherArgRoots(allocator);
     defer if (maybe_roots) |roots| roots.deinit();
 
     const roots = if (maybe_roots) |roots| roots.items else &config.roots;
@@ -328,12 +276,14 @@ pub fn main() !void {
         const status_rows = 1;
         const screen_high = winsize.row_high - status_rows;
         const status_low = screen_high + 1;
+        const item_width = winsize.col_total - 1;
 
         break :blk Canvas{
             .data = files.items,
             .screen_low = 0,
             .screen_high = screen_high,
             .status_low = status_low,
+            .item_width = item_width,
 
             .data_cursor = 0,
             .screen_cursor = 0,
