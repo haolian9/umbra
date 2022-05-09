@@ -49,27 +49,10 @@ fn handleResize() !void {
     if (SIGCTX) |ctx| {
         const winsize = try ctx.tty.getWinSize();
 
-        if (winsize.row_high < ctx.canvas.screen_high) {
-            // shorter
-            var buffer = ctx.tty.buffered_writer();
-            defer buffer.flush() catch unreachable;
+        var buffer = ctx.tty.buffered_writer();
+        defer buffer.flush() catch unreachable;
 
-            const short = ctx.canvas.screen_high - winsize.row_high;
-            var wb = buffer.writer();
-            ctx.canvas.screen_cursor = winsize.row_high;
-            ctx.canvas.data_cursor -= short;
-            try ctx.canvas.redraw(wb, false);
-            try escseq.Cursor.goto(wb, 0, ctx.canvas.screen_cursor);
-        } else if (winsize.row_high > ctx.canvas.screen_high) {
-            // longer
-            var buffer = ctx.tty.buffered_writer();
-            defer buffer.flush() catch unreachable;
-
-            var wb = buffer.writer();
-            try ctx.canvas.redraw(wb, true);
-        } else {
-            // no change to the height
-        }
+        try ctx.canvas.resizeWindowHeight(winsize.row_total, buffer.writer());
     }
 }
 
@@ -124,38 +107,43 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
         'k' => try canvas.scrollUp(writer),
 
         'L' => {
-            // go to the last line of the screen
-            const gap = canvas.screen_high - canvas.screen_cursor;
-            if (gap > 0) {
-                canvas.screen_cursor = canvas.screen_high;
-                canvas.data_cursor += gap;
+            const screen_gap: u16 = canvas.screen_high - canvas.screen_cursor;
+            if (screen_gap > 0) {
+                // it's possible that data_gap < screen_gap
+                const expected = canvas.data_cursor + screen_gap;
+                const data_gap: usize = if (canvas.data_high < expected)
+                    canvas.data_high - canvas.data_cursor
+                else
+                    screen_gap;
+                canvas.screen_cursor += @intCast(u16, data_gap);
+                canvas.data_cursor += data_gap;
                 try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-            } else {
-                // stay
             }
         },
         'H' => {
-            // go to the first line of the screen
             const gap = canvas.screen_cursor - canvas.screen_low;
             if (gap > 0) {
                 canvas.screen_cursor = canvas.screen_low;
                 canvas.data_cursor -= gap;
                 try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-            } else {
-                // stay
             }
         },
         'g' => {
-            // go to the first line of the data
             canvas.screen_cursor = canvas.screen_low;
             canvas.data_cursor = 0;
             try canvas.redraw(writer, false);
             try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
         },
         'G' => {
-            // go to the last line of the data
-            canvas.screen_cursor = canvas.screen_high;
-            canvas.data_cursor = canvas.data.len - 1;
+            // data.len could be less than one screen
+            if (canvas.data_high >= canvas.screen_high) {
+                canvas.screen_cursor = canvas.screen_high;
+                canvas.data_cursor = canvas.data_high;
+            } else {
+                const data_short = canvas.screen_high - @intCast(u16, canvas.data_high);
+                canvas.screen_cursor = canvas.screen_high - data_short;
+                canvas.data_cursor = canvas.data_high;
+            }
             try canvas.redraw(writer, false);
             try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
         },
@@ -273,33 +261,16 @@ pub fn main() !void {
 
     var canvas: Canvas = blk: {
         const winsize = try tty.getWinSize();
-        const status_rows = 1;
-        const screen_high = winsize.row_high - status_rows;
-        const status_low = screen_high + 1;
-        const item_width = winsize.col_total - 1;
-
-        break :blk Canvas{
-            .data = files.items,
-            .screen_low = 0,
-            .screen_high = screen_high,
-            .status_low = status_low,
-            .item_width = item_width,
-
-            .data_cursor = 0,
-            .screen_cursor = 0,
-        };
+        break :blk Canvas.init(files.items, winsize.row_total, 1, winsize.col_total - 1);
     };
 
     {
         var act_chld: linux.Sigaction = undefined;
         os.sigaction(linux.SIG.CHLD, null, &act_chld);
         act_chld.handler.handler = handleSIGCHLD;
-        // why?
-        // act_chld.handler.sigaction = null;
         os.sigaction(linux.SIG.CHLD, &act_chld, null);
 
         SIGCTX = &.{ .canvas = &canvas, .tty = &tty };
-        logger.debug("register SIGCTX?{s}", .{SIGCTX != null});
         var act_winch: linux.Sigaction = undefined;
         os.sigaction(linux.SIG.WINCH, null, &act_winch);
         act_winch.handler.handler = handleSIGWINCH;
