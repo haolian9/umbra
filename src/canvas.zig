@@ -1,6 +1,7 @@
 const std = @import("std");
 const fmt = std.fmt;
 const log = std.log;
+const fs = std.fs;
 
 const escseq = @import("./escseq.zig");
 
@@ -54,6 +55,7 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
         }
 
         pub fn resizeWindowHeight(self: *Self, window_rows: u16, wb: anytype) !void {
+            // TODO@haoliang handles width/columns resize
             if (window_rows < self.window_rows) {
                 // shorter
                 // todo@haoliang: keep cursor where it is or at the bottom of screen
@@ -86,6 +88,36 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
             self.screen_high = status_low - 1;
         }
 
+        /// after this, the cursor would be at end of the line.
+        fn resetCurrentLine(self: Self, wb: anytype) !void {
+            try escseq.Erase.line(wb);
+            const item = self.data[self.data_cursor];
+            try wb.print(item_format, .{self.wrapItem(item)});
+        }
+
+        fn highlightCurrentLine(self: Self, wb: anytype) !void {
+            try escseq.Erase.line(wb);
+            try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
+        }
+
+        fn writeItem(self: Self, wb: anytype, item: []const u8) !void {
+            try wb.print(item_format, .{self.wrapItem(item)});
+        }
+
+        fn writeHighlightedItem(self: Self, wb: anytype, item: []const u8) !void {
+            const parts = PathParts.parse(self.wrapItem(item));
+
+            if (parts.dir) |dir| {
+                try wb.print(" {s}/", .{dir});
+            } else {
+                try wb.print(" ", .{});
+            }
+            try escseq.SGR.rendition(wb, &.{ .fgRed, .bold });
+            try wb.print("{s}", .{parts.stem});
+            try escseq.SGR.rendition(wb, &.{.reset});
+            try wb.print("{s}", .{parts.ext});
+        }
+
         pub fn redraw(self: Self, wb: anytype, remember_cursor: bool) !void {
             if (remember_cursor) try escseq.Cursor.save(wb);
             defer if (remember_cursor) escseq.Cursor.restore(wb) catch unreachable;
@@ -115,22 +147,24 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
 
         pub fn scrollUp(self: *Self, wb: anytype) !void {
             if (self.screen_cursor > self.screen_low) {
+                try self.resetCurrentLine(wb);
                 self.screen_cursor -= 1;
                 self.data_cursor -= 1;
-
                 try escseq.Cursor.prevLine(wb, 1);
+                try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
+                try escseq.Cursor.goto(wb, 0, self.screen_cursor);
             } else if (self.screen_cursor == self.screen_low) {
                 // self.screen_cursor no move
 
                 if (self.data_cursor == 0) {
                     // begin of data
                 } else if (self.data_cursor > self.screen_low) {
+                    try self.resetCurrentLine(wb);
                     self.data_cursor -= 1;
                     // need to update the first line
                     try escseq.Cursor.scrollDown(wb, 1);
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
-                    const item = self.data[self.data_cursor];
-                    try fmt.format(wb, item_format, .{self.wrapItem(item)});
+                    try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
                 } else {
                     unreachable;
@@ -145,9 +179,12 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
                 if (self.data_cursor == self.data_high) {
                     // end of data, can not go further
                 } else if (self.data_cursor < self.data_high) {
+                    try self.resetCurrentLine(wb);
                     self.screen_cursor += 1;
                     self.data_cursor += 1;
                     try escseq.Cursor.nextLine(wb, 1);
+                    try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
+                    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
                 } else {
                     unreachable;
                 }
@@ -157,11 +194,11 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
                 if (self.data_cursor == self.data_high) {
                     // end of data
                 } else if (self.data_cursor < self.data_high) {
+                    try self.resetCurrentLine(wb);
                     self.data_cursor += 1;
                     try escseq.Cursor.scrollUp(wb, 1);
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
-                    const item = self.data[self.data_cursor];
-                    try fmt.format(wb, item_format, .{self.wrapItem(item)});
+                    try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
                     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
                 } else {
                     unreachable;
@@ -176,5 +213,104 @@ pub fn Canvas(comptime T: type, comptime item_format: []const u8) type {
             const start = if (item.len < self.item_width) 0 else item.len - self.item_width;
             return item[start..];
         }
+
+        pub fn gotoLastLineOnScreen(self: *Self, wb: anytype) !void {
+            const screen_gap: u16 = self.screen_high - self.screen_cursor;
+
+            if (screen_gap == 0) return;
+
+            try self.resetCurrentLine(wb);
+            // it's possible that data_gap < screen_gap
+            const expected = self.data_cursor + screen_gap;
+            const data_gap: usize = if (self.data_high < expected)
+                self.data_high - self.data_cursor
+            else
+                screen_gap;
+            self.screen_cursor += @intCast(u16, data_gap);
+            self.data_cursor += data_gap;
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.highlightCurrentLine(wb);
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+        }
+
+        pub fn gotoFirstLineOnScreen(self: *Self, wb: anytype) !void {
+            const gap: u16 = self.screen_cursor - self.screen_low;
+
+            if (gap == 0) return;
+
+            try self.resetCurrentLine(wb);
+            self.screen_cursor = self.screen_low;
+            self.data_cursor -= gap;
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.highlightCurrentLine(wb);
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+        }
+
+        pub fn gotoFirstLine(self: *Self, wb: anytype) !void {
+            if (self.data_cursor == 0) return;
+
+            self.screen_cursor = self.screen_low;
+            self.data_cursor = 0;
+            try self.redraw(wb, false);
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.highlightCurrentLine(wb);
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+        }
+
+        pub fn gotoLastLine(self: *Self, wb: anytype) !void {
+            // data.len could be less than one screen
+            if (self.data_high >= self.screen_high) {
+                self.screen_cursor = self.screen_high;
+                self.data_cursor = self.data_high;
+            } else {
+                const data_short = self.screen_high - @intCast(u16, self.data_high);
+                self.screen_cursor = self.screen_high - data_short;
+                self.data_cursor = self.data_high;
+            }
+            try self.redraw(wb, false);
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.highlightCurrentLine(wb);
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+        }
+
+        /// row: 0-based
+        pub fn gotoLine(self: *Self, wb: anytype, row: u16) !void {
+            if (row < self.screen_cursor) {
+                try self.resetCurrentLine(wb);
+                const gap = self.screen_cursor - row;
+                self.screen_cursor -= gap;
+                self.data_cursor -= gap;
+                try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+                try self.highlightCurrentLine(wb);
+                try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            } else if (row > self.screen_cursor) {
+                try self.resetCurrentLine(wb);
+                const gap = row - self.screen_cursor;
+                self.screen_cursor += gap;
+                self.data_cursor += gap;
+                try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+                try self.highlightCurrentLine(wb);
+                try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            } else {
+                // stay
+            }
+        }
     };
 }
+
+const PathParts = struct {
+    // no trailing slash
+    dir: ?[]const u8,
+    stem: []const u8,
+    ext: []const u8,
+
+    fn parse(path: []const u8) PathParts {
+        // TODO@haoliang optimize
+        const dir = fs.path.dirname(path);
+        const base = fs.path.basename(path);
+        const ext = fs.path.extension(base);
+        const stem = base[0 .. base.len - ext.len];
+
+        return .{ .dir = dir, .stem = stem, .ext = ext };
+    }
+};

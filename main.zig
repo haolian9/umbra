@@ -106,56 +106,17 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
         'j' => try canvas.scrollDown(writer),
         'k' => try canvas.scrollUp(writer),
 
-        'L' => {
-            const screen_gap: u16 = canvas.screen_high - canvas.screen_cursor;
-            if (screen_gap > 0) {
-                // it's possible that data_gap < screen_gap
-                const expected = canvas.data_cursor + screen_gap;
-                const data_gap: usize = if (canvas.data_high < expected)
-                    canvas.data_high - canvas.data_cursor
-                else
-                    screen_gap;
-                canvas.screen_cursor += @intCast(u16, data_gap);
-                canvas.data_cursor += data_gap;
-                try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-            }
-        },
-        'H' => {
-            const gap = canvas.screen_cursor - canvas.screen_low;
-            if (gap > 0) {
-                canvas.screen_cursor = canvas.screen_low;
-                canvas.data_cursor -= gap;
-                try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-            }
-        },
-        'g' => {
-            canvas.screen_cursor = canvas.screen_low;
-            canvas.data_cursor = 0;
-            try canvas.redraw(writer, false);
-            try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-        },
-        'G' => {
-            // data.len could be less than one screen
-            if (canvas.data_high >= canvas.screen_high) {
-                canvas.screen_cursor = canvas.screen_high;
-                canvas.data_cursor = canvas.data_high;
-            } else {
-                const data_short = canvas.screen_high - @intCast(u16, canvas.data_high);
-                canvas.screen_cursor = canvas.screen_high - data_short;
-                canvas.data_cursor = canvas.data_high;
-            }
-            try canvas.redraw(writer, false);
-            try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-        },
+        'H' => try canvas.gotoFirstLineOnScreen(writer),
+        'L' => try canvas.gotoLastLineOnScreen(writer),
+        'g' => try canvas.gotoFirstLine(writer),
+        'G' => try canvas.gotoLastLine(writer),
 
         '\r', 'l' => {
             // play the video
             _ = try play(allocator, canvas.data[canvas.data_cursor]);
         },
 
-        'r' => {
-            try handleResize();
-        },
+        'r' => try handleResize(),
 
         'd', 'h' => {
             const old = canvas.data[canvas.data_cursor];
@@ -186,19 +147,7 @@ fn handleMouseEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, 
                 if (canvas.screen_cursor == ev.row) {
                     _ = try play(allocator, canvas.data[canvas.data_cursor]);
                 } else if (ev.row < canvas.screen_high) {
-                    if (ev.row < canvas.screen_cursor) {
-                        const gap = canvas.screen_cursor - ev.row;
-                        canvas.screen_cursor -= gap;
-                        canvas.data_cursor -= gap;
-                        try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-                    } else if (ev.row > canvas.screen_cursor) {
-                        const gap = ev.row - canvas.screen_cursor;
-                        canvas.screen_cursor += gap;
-                        canvas.data_cursor += gap;
-                        try escseq.Cursor.goto(writer, 0, canvas.screen_cursor);
-                    } else {
-                        // stay
-                    }
+                    try canvas.gotoLine(writer, ev.row);
                 } else {
                     // out of screen, leave it
                 }
