@@ -232,13 +232,13 @@ pub fn main() !void {
 
     // first draw
     try canvas.redraw(wb, true);
+    try escseq.Cursor.home(wb);
+    try canvas.highlightCurrentLine(wb);
     try buffer.flush();
 
     // interact
     {
         defer buffer.flush() catch unreachable;
-
-        try escseq.Cursor.home(w);
 
         var input_buffer: [16]u8 = undefined;
 
@@ -270,7 +270,7 @@ pub fn main() !void {
                 },
             }
 
-            try canvas.resetStatusLine(wb, "data: {}/{}; screen: {}/{}", .{ canvas.data_cursor, canvas.data.len - 1, canvas.screen_cursor, canvas.screen_high });
+            // try canvas.resetStatusLine(wb, "data: {}/{}; screen: {}/{}", .{ canvas.data_cursor, canvas.data.len - 1, canvas.screen_cursor, canvas.screen_high });
         }
     }
 }

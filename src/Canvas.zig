@@ -103,16 +103,19 @@ fn resetWindowHeight(self: *Self, window_rows: u16) void {
     self.screen_high = status_low - 1;
 }
 
-/// after this, the cursor would be at end of the line.
+/// cursor would move to the end of line
 fn resetCurrentLine(self: Self, wb: anytype) !void {
     try escseq.Erase.line(wb);
     const item = self.data[self.data_cursor];
     try self.writeItem(wb, item);
 }
 
-fn highlightCurrentLine(self: Self, wb: anytype) !void {
+/// no cursor moves
+pub fn highlightCurrentLine(self: Self, wb: anytype) !void {
+    try escseq.Cursor.save(wb);
     try escseq.Erase.line(wb);
     try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
+    try escseq.Cursor.restore(wb);
 }
 
 fn writeItem(self: Self, wb: anytype, item: []const u8) !void {
@@ -245,7 +248,6 @@ pub fn gotoLastLineOnScreen(self: *Self, wb: anytype) !void {
     self.data_cursor += data_gap;
     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
     try self.highlightCurrentLine(wb);
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
 }
 
 pub fn gotoFirstLineOnScreen(self: *Self, wb: anytype) !void {
@@ -258,7 +260,6 @@ pub fn gotoFirstLineOnScreen(self: *Self, wb: anytype) !void {
     self.data_cursor -= gap;
     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
     try self.highlightCurrentLine(wb);
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
 }
 
 pub fn gotoFirstLine(self: *Self, wb: anytype) !void {
@@ -269,7 +270,6 @@ pub fn gotoFirstLine(self: *Self, wb: anytype) !void {
     try self.redraw(wb, false);
     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
     try self.highlightCurrentLine(wb);
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
 }
 
 pub fn gotoLastLine(self: *Self, wb: anytype) !void {
@@ -285,7 +285,6 @@ pub fn gotoLastLine(self: *Self, wb: anytype) !void {
     try self.redraw(wb, false);
     try escseq.Cursor.goto(wb, 0, self.screen_cursor);
     try self.highlightCurrentLine(wb);
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
 }
 
 /// row: 0-based
@@ -297,7 +296,6 @@ pub fn gotoLine(self: *Self, wb: anytype, row: u16) !void {
         self.data_cursor -= gap;
         try escseq.Cursor.goto(wb, 0, self.screen_cursor);
         try self.highlightCurrentLine(wb);
-        try escseq.Cursor.goto(wb, 0, self.screen_cursor);
     } else if (row > self.screen_cursor) {
         try self.resetCurrentLine(wb);
         const gap = row - self.screen_cursor;
@@ -305,7 +303,6 @@ pub fn gotoLine(self: *Self, wb: anytype, row: u16) !void {
         self.data_cursor += gap;
         try escseq.Cursor.goto(wb, 0, self.screen_cursor);
         try self.highlightCurrentLine(wb);
-        try escseq.Cursor.goto(wb, 0, self.screen_cursor);
     } else {
         // stay
     }
