@@ -1,5 +1,5 @@
 
-pub const Canvas = @import("./canvas.zig").Canvas;
+pub const Canvas = @import("./Canvas.zig");
 pub const TTY = @import("./TTY.zig");
 pub const VideoFiles = @import("./VideoFiles.zig");
 

@@ -18,14 +18,11 @@ concepts:
 goals/limits:
 * runs on linux only
 * each displayed item ends with a regular file
-* configurable mime-opener, xdg-open as fallback
-* able to read files from stdin: `find | umbra`
+* configurable mime-opener
 * no async
-* no multi-process
 * no filesystem modification: rm, mv ... (except trash)
 * configurable color for basename
 * sort by directory, then mtime or size or nature
-* ~~fore/back buffer for delta rendering~~
 
 todo:
 * ~~line overflow~~

@@ -9,6 +9,7 @@ tape: []const u8,
 items: []const []const u8,
 
 const sentinel = '\x00';
+const suffixes = [_][]const u8{".mp4", ".mkv"};
 
 const Self = @This();
 const VideoFiles = Self;
@@ -26,6 +27,14 @@ pub fn deinit(self: *Self) void {
     self.allocator.free(self.items);
 }
 
+fn isVideoFile(basename: []const u8) bool {
+    const ext = fs.path.extension(basename);
+    inline for (suffixes) |suf| {
+        if (mem.eql(u8, ext, suf)) return true;
+    }
+    return false;
+}
+
 /// VideoFiles.deinit() should be called eventually.
 pub fn fromRoots(allocator: mem.Allocator, roots: []const []const u8, random: ?rand.Random) !VideoFiles {
     const tape = blk: {
@@ -41,7 +50,7 @@ pub fn fromRoots(allocator: mem.Allocator, roots: []const []const u8, random: ?r
 
             while (try it.next()) |entry| {
                 if (entry.kind != fs.File.Kind.File) continue;
-                if (!mem.endsWith(u8, entry.basename, ".mp4")) continue;
+                if (!isVideoFile(entry.basename)) continue;
 
                 const path = try fs.path.join(allocator, &.{ root, entry.path });
                 defer allocator.free(path);

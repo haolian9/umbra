@@ -10,6 +10,7 @@ const fs = std.fs;
 const builtin = @import("builtin");
 
 const umbra = @import("./src/umbra.zig");
+const Canvas = umbra.Canvas;
 const TTY = umbra.TTY;
 const VideoFiles = umbra.VideoFiles;
 const escseq = umbra.escseq;
@@ -17,8 +18,6 @@ const events = umbra.events;
 const cli_args = umbra.cli_args;
 
 const config = @import("./config.zig");
-
-const Canvas = umbra.Canvas([]const u8, " {s}");
 
 const SigCtx = struct {
     canvas: *Canvas,

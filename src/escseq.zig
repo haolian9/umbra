@@ -249,7 +249,7 @@ pub const Private = struct {
 
 /// select graphic rendition
 pub const SGR = struct {
-    const Rendition = enum(u8) {
+    pub const Rendition = enum(u8) {
         reset = 0,
         bold = 1,
         dim = 2,
