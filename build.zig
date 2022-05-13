@@ -11,5 +11,4 @@ pub fn build(b: *Builder) void {
     exe.strip = true;
     exe.single_threaded = true;
     exe.install();
-
 }
