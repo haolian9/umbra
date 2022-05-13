@@ -41,10 +41,6 @@ pub fn log(
 var SIGCTX: ?*SigCtx = null;
 
 fn handleResize() !void {
-    // todo: changes need to be applied to
-    // * canvas.{screen_cursor,data_cursor}
-    // * scrollable region
-
     if (SIGCTX) |ctx| {
         const winsize = try ctx.tty.getWinSize();
 
@@ -115,24 +111,29 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
             _ = try play(allocator, canvas.data[canvas.data_cursor]);
         },
 
-        'r' => try handleResize(),
-
-        'd', 'h' => {
+        'd' => {
             const old = canvas.data[canvas.data_cursor];
             const new = try fs.path.join(allocator, &.{ config.trash_dir, fs.path.basename(old) });
             defer allocator.free(new);
 
-            logger.debug("mv {s} {s}", .{ old, new });
-            fs.renameAbsolute(old, new) catch |err| {
-                logger.err("failed to mv {s} {s}; err: {any}", .{ old, new, err });
-            };
+            blk: {
+                fs.renameAbsolute(old, new) catch |err| {
+                    logger.err("mv {s} {s}; err: {any}", .{ old, new, err });
+                    try canvas.resetStatusLine(writer, "{s}", .{err});
+                    break :blk;
+                };
+                logger.debug("mv {s} {s}", .{ old, new });
+                try canvas.resetStatusLine(writer, "trash {s}", .{canvas.wrapItem(old)});
+            }
 
             // todo@hl
             // * remove the file from the canvas.data
             // * redraw the canvas
         },
 
-        else => {},
+        else => |char| {
+            try canvas.resetStatusLine(writer, "ascii: {c} {d}", .{ char, char });
+        },
     }
 }
 
@@ -153,16 +154,13 @@ fn handleMouseEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, 
             },
         },
         else => {
-            // try canvas.resetStatusLine(writer, "{any}", .{ev});
+            try canvas.resetStatusLine(writer, "{any}", .{ev});
         },
     }
 }
 
 fn handleRuneKeyboardEvent(writer: anytype, canvas: Canvas, ev: events.RuneKeyboardEvent) !void {
-    _ = writer;
-    _ = canvas;
-    _ = ev;
-    // try canvas.resetStatusLine(writer, "{any}", .{ev});
+    try canvas.resetStatusLine(writer, "rune: {any}", .{ev});
 }
 
 fn createLogwriter() !fs.File.Writer {

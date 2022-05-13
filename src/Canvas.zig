@@ -227,7 +227,7 @@ pub fn scrollDown(self: *Self, wb: anytype) !void {
 }
 
 // should respect type of data's element
-fn wrapItem(self: Self, item: []const u8) []const u8 {
+pub fn wrapItem(self: Self, item: []const u8) []const u8 {
     const start = if (item.len < self.item_width) 0 else item.len - self.item_width;
     return item[start..];
 }
