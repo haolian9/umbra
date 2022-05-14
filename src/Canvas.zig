@@ -1,7 +1,8 @@
 const std = @import("std");
 const fmt = std.fmt;
-const log = std.log;
 const fs = std.fs;
+const mem = std.mem;
+const testing = std.testing;
 
 const escseq = @import("./escseq.zig");
 
@@ -130,9 +131,9 @@ fn writeHighlightedItem(self: Self, wb: anytype, item: []const u8) !void {
     } else {
         try wb.print(" ", .{});
     }
-    try escseq.SGR.rendition(wb, &.{.fgRed, .bold});
+    try escseq.SGR.rendition(wb, &.{ .FgRed, .Bold });
     try wb.print("{s}", .{parts.stem});
-    try escseq.SGR.rendition(wb, &.{.reset});
+    try escseq.SGR.rendition(wb, &.{.Reset});
     try wb.print("{s}", .{parts.ext});
 }
 
@@ -307,3 +308,15 @@ pub fn gotoLine(self: *Self, wb: anytype, row: u16) !void {
         // stay
     }
 }
+
+test "path parts" {
+    {
+        const parts = PathParts.parse("/tmp/a.mp4");
+        const expected = PathParts{ .dir = "/tmp", .stem = "a", .ext = ".mp4" };
+        try testing.expect(mem.eql(u8, expected.dir.?, parts.dir.?));
+        try testing.expect(mem.eql(u8, expected.stem, parts.stem));
+        try testing.expect(mem.eql(u8, expected.ext, parts.ext));
+    }
+}
+
+// # asyncrun: zig test

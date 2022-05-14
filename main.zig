@@ -95,8 +95,8 @@ fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
     return pid;
 }
 
-fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.CharKeyboardEvent) !void {
-    switch (ev.char) {
+fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.KeySymbol) !void {
+    switch (ev.symbol) {
         'q' => return error.Quit,
         'j' => try canvas.scrollDown(writer),
         'k' => try canvas.scrollUp(writer),
@@ -131,13 +131,13 @@ fn handleCharKeyboardEvent(allocator: mem.Allocator, writer: anytype, canvas: *C
             // * redraw the canvas
         },
 
-        else => |char| {
-            try canvas.resetStatusLine(writer, "ascii: {c} {d}", .{ char, char });
+        else => |symbol| {
+            try canvas.resetStatusLine(writer, "ascii: {c} {d}", .{ symbol, symbol });
         },
     }
 }
 
-fn handleMouseEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.MouseEvent) !void {
+fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.Mouse) !void {
     switch (ev.btn) {
         .Up => try canvas.scrollUp(writer),
         .Down => try canvas.scrollDown(writer),
@@ -159,8 +159,8 @@ fn handleMouseEvent(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, 
     }
 }
 
-fn handleRuneKeyboardEvent(writer: anytype, canvas: Canvas, ev: events.RuneKeyboardEvent) !void {
-    try canvas.resetStatusLine(writer, "rune: {any}", .{ev});
+fn handleKeyCodes(writer: anytype, canvas: Canvas, ev: events.KeyCodes) !void {
+    try canvas.resetStatusLine(writer, "codes: {any}", .{ev});
 }
 
 fn createLogwriter() !fs.File.Writer {
@@ -254,17 +254,17 @@ pub fn main() !void {
             };
 
             switch (event) {
-                .Mouse => |mouse| {
-                    try handleMouseEvent(allocator, wb, &canvas, mouse);
+                .mouse => |mouse| {
+                    try handleMouse(allocator, wb, &canvas, mouse);
                 },
-                .Char => |char| {
-                    handleCharKeyboardEvent(allocator, wb, &canvas, char) catch |err| switch (err) {
+                .symbol => |symbol| {
+                    handleKeySymbol(allocator, wb, &canvas, symbol) catch |err| switch (err) {
                         error.Quit => break,
                         else => return err,
                     };
                 },
-                .Rune => |rune| {
-                    try handleRuneKeyboardEvent(wb, canvas, rune);
+                .codes => |codes| {
+                    try handleKeyCodes(wb, canvas, codes);
                 },
             }
 

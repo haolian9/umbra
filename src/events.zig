@@ -4,28 +4,28 @@ const mem = std.mem;
 const fmt = std.fmt;
 
 pub const Event = union(enum) {
-    Mouse: MouseEvent,
-    Char: CharKeyboardEvent,
-    Rune: RuneKeyboardEvent,
+    mouse: Mouse,
+    symbol: KeySymbol,
+    codes: KeyCodes,
 
     const Self = @This();
 
     pub fn fromString(input: []const u8) !Event {
         if (input[0] == '\x1B') {
             if (input.len == 1) {
-                return Event{ .Char = .{ .char = '\x1B' } };
+                return Event{ .symbol = .{ .symbol = '\x1B' } };
             }
 
             if (input[1] == '[') {
                 return switch (input[2]) {
-                    '<' => Event{ .Mouse = try MouseEvent.fromString(input) },
-                    else => Event{ .Rune = .{ .rune = input } },
+                    '<' => Event{ .mouse = try Mouse.fromString(input) },
+                    else => Event{ .codes = .{ .codes = input } },
                 };
             } else {
-                return Event{ .Rune = .{ .rune = input } };
+                return Event{ .codes = .{ .codes = input } };
             }
         } else if (input.len == 1) {
-            return Event{ .Char = .{ .char = input[0] } };
+            return Event{ .symbol = .{ .symbol = input[0] } };
         } else {
             unreachable;
         }
@@ -35,20 +35,20 @@ pub const Event = union(enum) {
         _ = options;
 
         switch (self) {
-            .Mouse => |mouse| {
-                try fmt.format(writer, "ignored chars: mouse {any}", .{mouse});
+            .mouse => |mouse| {
+                try fmt.format(writer, "ignored mouse: {any}", .{mouse});
             },
-            .Char => |char| {
-                try fmt.format(writer, "ignored chars: char {any}", .{char});
+            .symbol => |symbol| {
+                try fmt.format(writer, "ignored char: {c}", .{symbol.symbol});
             },
-            .Rune => |rune| {
-                try fmt.format(writer, "ignored chars: rune {any}", .{rune});
+            .codes => |codes| {
+                try fmt.format(writer, "ignored codes: {any}", .{codes.codes});
             },
         }
     }
 };
 
-pub const MouseEvent = struct {
+pub const Mouse = struct {
     btn: Btn,
     // 0-based
     col: u16,
@@ -71,7 +71,7 @@ pub const MouseEvent = struct {
         Up = 'm',
     };
 
-    pub fn fromString(str: []const u8) !MouseEvent {
+    pub fn fromString(str: []const u8) !Mouse {
         // \x1b[<2;98;21m
         // \x1b[<0;2;3M
         assert(mem.startsWith(u8, str, "\x1B[<"));
@@ -105,7 +105,7 @@ pub const MouseEvent = struct {
 
         const press_state = @intToEnum(PressState, str[str.len - 1]);
 
-        return MouseEvent{
+        return Mouse{
             .btn = btn,
             .col = col,
             .row = row,
@@ -114,10 +114,10 @@ pub const MouseEvent = struct {
     }
 };
 
-pub const CharKeyboardEvent = struct {
-    char: u8,
+pub const KeySymbol = struct {
+    symbol: u8,
 };
 
-pub const RuneKeyboardEvent = struct {
-    rune: []const u8,
+pub const KeyCodes = struct {
+    codes: []const u8,
 };

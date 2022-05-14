@@ -27,24 +27,24 @@ pub fn main() !void {
             };
 
             switch (event) {
-                .Mouse => |mouse| {
+                .mouse => |mouse| {
                     try w.print("input:mouse: {s}\n", .{mouse});
                 },
-                .Char => |kb| {
-                    switch (kb.char) {
+                .symbol => |symbol| {
+                    switch (symbol.symbol) {
                         'q', 'Q' => break,
                         '0' => try escseq.Cursor.home(w),
-                        '\r', '\n' => try w.print("input:char enter\n", .{}),
-                        '\t' => try w.print("input:char tab\n", .{}),
+                        '\r', '\n' => try w.print("input:symbol enter\n", .{}),
+                        '\t' => try w.print("input:symbol tab\n", .{}),
                         'h' => try escseq.Cursor.back(w, 1),
                         'j' => try escseq.Cursor.down(w, 1),
                         'k' => try escseq.Cursor.up(w, 1),
                         'l' => try escseq.Cursor.forward(w, 1),
-                        else => |char| try w.print("input:char '{c}' ({d})\n", .{ char, char }),
+                        else => |sym| try w.print("input:symbol '{c}' ({d})\n", .{ sym, sym }),
                     }
                 },
-                .Rune => |kb| {
-                    try w.print("input:rune: '{c}'\n", .{fmt.fmtSliceEscapeLower(kb.rune)});
+                .codes => |codes| {
+                    try w.print("input:codes: '{c}'\n", .{fmt.fmtSliceEscapeLower(codes.codes)});
                 },
             }
         }

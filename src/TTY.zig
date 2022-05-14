@@ -125,9 +125,7 @@ pub fn getInput(self: *Self, buffer: *[16]u8) !usize {
         const n = try r.read(buffer[0..1]);
         if (n != 1) unreachable;
 
-        if (buffer[0] != '\x1B') {
-            return 1;
-        }
+        if (buffer[0] != '\x1B') return 1;
     }
 
     {

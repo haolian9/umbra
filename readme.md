@@ -15,6 +15,10 @@ concepts:
 * csi: control sequence introducer
     * `\x1B[`
 
+naming convention
+* enum: CamelCase
+* union: snake\_case
+
 goals/limits:
 * runs on linux only
 * each displayed item ends with a regular file

@@ -12,8 +12,8 @@ const TTY = umbra.TTY;
 const escseq = umbra.escseq;
 const events = umbra.events;
 
-fn handleCharKeyboardEvent(wb: anytype, canvas: *Canvas, ev: events.CharKeyboardEvent) !void {
-    switch (ev.char) {
+fn handleKeySymbol(wb: anytype, canvas: *Canvas, ev: events.KeySymbol) !void {
+    switch (ev.symbol) {
         'q' => return error.Quit,
         'j' => try canvas.scrollDown(wb),
         'k' => try canvas.scrollUp(wb),
@@ -23,13 +23,13 @@ fn handleCharKeyboardEvent(wb: anytype, canvas: *Canvas, ev: events.CharKeyboard
         'g' => try canvas.gotoFirstLine(wb),
         'G' => try canvas.gotoLastLine(wb),
 
-        else => |char| {
-            try canvas.resetStatusLine(wb, "{c} {d}", .{ char, char });
+        else => |symbol| {
+            try canvas.resetStatusLine(wb, "{c} {d}", .{ symbol, symbol });
         },
     }
 }
 
-fn handleMouseEvent(wb: anytype, canvas: *Canvas, ev: events.MouseEvent) !void {
+fn handleMouse(wb: anytype, canvas: *Canvas, ev: events.Mouse) !void {
     switch (ev.btn) {
         .Up => try canvas.scrollUp(wb),
         .Down => try canvas.scrollDown(wb),
@@ -43,7 +43,7 @@ fn handleMouseEvent(wb: anytype, canvas: *Canvas, ev: events.MouseEvent) !void {
     }
 }
 
-fn handleRuneKeyboardEvent(wb: anytype, canvas: Canvas, ev: events.RuneKeyboardEvent) !void {
+fn handleKeyCodes(wb: anytype, canvas: Canvas, ev: events.KeyCodes) !void {
     try canvas.resetStatusLine(wb, "{any}", .{ev});
 }
 
@@ -102,17 +102,17 @@ pub fn main() !void {
             };
 
             switch (event) {
-                .Mouse => |mouse| {
-                    try handleMouseEvent(wb, &canvas, mouse);
+                .mouse => |mouse| {
+                    try handleMouse(wb, &canvas, mouse);
                 },
-                .Char => |char| {
-                    handleCharKeyboardEvent(wb, &canvas, char) catch |err| switch (err) {
+                .symbol => |symbol| {
+                    handleKeySymbol(wb, &canvas, symbol) catch |err| switch (err) {
                         error.Quit => break,
                         else => return err,
                     };
                 },
-                .Rune => |rune| {
-                    try handleRuneKeyboardEvent(wb, canvas, rune);
+                .codes => |codes| {
+                    try handleKeyCodes(wb, canvas, codes);
                 },
             }
         }
