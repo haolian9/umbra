@@ -105,6 +105,10 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
         'L' => try canvas.gotoLastLineOnScreen(writer),
         'g' => try canvas.gotoFirstLine(writer),
         'G' => try canvas.gotoLastLine(writer),
+        'm' => {
+            const screen_mid = canvas.screen_high / 2;
+            try canvas.gotoLine(writer, screen_mid);
+        },
 
         '\r', 'l' => {
             // play the video
