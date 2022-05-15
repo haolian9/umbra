@@ -57,18 +57,18 @@ pub const Mouse = struct {
     press_state: PressState, // pressed on or off
 
     pub const Btn = enum(u8) {
-        Left = 0,
-        Mid = 1,
-        Right = 2,
-        Up = 64,
-        Down = 65,
-        LeftDrag = 32, // 左键拖动
-        RightDrag = 34, // 右键拖动
+        left = 0,
+        mid = 1,
+        right = 2,
+        up = 64,
+        down = 65,
+        left_drag = 32, // 左键拖动
+        right_drag = 34, // 右键拖动
     };
 
     pub const PressState = enum(u8) {
-        Down = 'M',
-        Up = 'm',
+        down = 'M',
+        up = 'm',
     };
 
     pub fn fromString(str: []const u8) !Mouse {

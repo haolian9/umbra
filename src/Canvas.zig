@@ -131,9 +131,9 @@ fn writeHighlightedItem(self: Self, wb: anytype, item: []const u8) !void {
     } else {
         try wb.print(" ", .{});
     }
-    try escseq.SGR.rendition(wb, &.{ .FgRed, .Bold });
+    try escseq.SGR.rendition(wb, &.{ .fg_red, .bold});
     try wb.print("{s}", .{parts.stem});
-    try escseq.SGR.rendition(wb, &.{.Reset});
+    try escseq.SGR.rendition(wb, &.{.reset});
     try wb.print("{s}", .{parts.ext});
 }
 

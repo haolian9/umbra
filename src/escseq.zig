@@ -171,15 +171,15 @@ pub const Style = struct {
 
 pub const Foreground = struct {
     const Code = enum(u8) {
-        Black = 30,
-        Red = 31,
-        Green = 32,
-        Yellow = 33,
-        Blue = 34,
-        Magenta = 35,
-        Cyan = 36,
-        White = 37,
-        Default = 39,
+        black = 30,
+        red = 31,
+        green = 32,
+        yellow = 33,
+        blue = 34,
+        magenta = 35,
+        cyan = 36,
+        white = 37,
+        default = 39,
     };
 
     pub fn color(writer: anytype, code: Code) !void {
@@ -193,15 +193,15 @@ pub const Foreground = struct {
 
 pub const Background = struct {
     const Code = enum(u8) {
-        Black = 40,
-        Red = 41,
-        Green = 42,
-        Yellow = 43,
-        Blue = 44,
-        Magenta = 45,
-        Cyan = 46,
-        White = 47,
-        Default = 49,
+        black = 40,
+        red = 41,
+        green = 42,
+        yellow = 43,
+        blue = 44,
+        magenta = 45,
+        cyan = 46,
+        white = 47,
+        default = 49,
     };
 
     pub fn color(writer: anytype, code: Code) !void {
@@ -250,42 +250,42 @@ pub const Private = struct {
 /// select graphic rendition
 pub const SGR = struct {
     pub const Rendition = enum(u8) {
-        Reset = 0,
-        Bold = 1,
-        Dim = 2,
-        Italic = 3,
-        Underline = 4,
-        Blink = 5,
-        Reverse = 7,
-        Hide = 8,
-        Strike = 9,
+        reset = 0,
+        bold = 1,
+        dim = 2,
+        italic = 3,
+        underline = 4,
+        blink = 5,
+        reverse = 7,
+        hide = 8,
+        strike = 9,
         // reset
-        ResetItalic = 23,
-        ResetUnderline = 24,
-        ResetBlink = 25,
-        ResetReverse = 27,
-        Show = 28,
-        ResetStrike = 29,
+        reset_italic = 23,
+        reset_underline = 24,
+        reset_blink = 25,
+        reset_reverse = 27,
+        show = 28,
+        reset_strike = 29,
         // fg color
-        FgBlack = 30,
-        FgRed = 31,
-        FgGreen = 32,
-        FgYellow = 33,
-        FgBlue = 34,
-        FgMagenta = 35,
-        FgCyan = 36,
-        FgWhite = 37,
-        FgDefault = 39,
+        fg_black = 30,
+        fg_red = 31,
+        fg_green = 32,
+        fg_yellow = 33,
+        fg_blue = 34,
+        fg_magenta = 35,
+        fg_cyan = 36,
+        fg_white = 37,
+        fg_default = 39,
         // bg color
-        BgBlack = 40,
-        BgRed = 41,
-        BgGreen = 42,
-        BgYellow = 43,
-        BgBlue = 44,
-        BgMagenta = 45,
-        BgCyan = 46,
-        BgWhite = 47,
-        BgDefault = 49,
+        bg_black = 40,
+        bg_red = 41,
+        bg_green = 42,
+        bg_yellow = 43,
+        bg_blue = 44,
+        bg_magenta = 45,
+        bg_cyan = 46,
+        bg_white = 47,
+        bg_default = 49,
     };
 
     pub fn rendition(writer: anytype, attrs: []const Rendition) !void {
@@ -301,7 +301,7 @@ pub const SGR = struct {
 
 // ref `$ infocmp tmux-256color`
 pub const Cap = struct {
-    pub const Kind = enum { Tmux, Alacritty };
+    pub const Kind = enum { tmux, alacritty };
 
     pub fn toStatusLine(kind: Kind, writer: anytype) !void {
         try writer.writeAll(switch (kind) {

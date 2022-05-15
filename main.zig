@@ -139,11 +139,11 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
 
 fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.Mouse) !void {
     switch (ev.btn) {
-        .Up => try canvas.scrollUp(writer),
-        .Down => try canvas.scrollDown(writer),
-        .Left => switch (ev.press_state) {
-            .Down => {},
-            .Up => {
+        .up => try canvas.scrollUp(writer),
+        .down => try canvas.scrollDown(writer),
+        .left => switch (ev.press_state) {
+            .down => {},
+            .up => {
                 if (canvas.screen_cursor == ev.row) {
                     _ = try play(allocator, canvas.data[canvas.data_cursor]);
                 } else if (ev.row < canvas.screen_high) {

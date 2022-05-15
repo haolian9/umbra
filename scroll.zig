@@ -31,11 +31,11 @@ fn handleKeySymbol(wb: anytype, canvas: *Canvas, ev: events.KeySymbol) !void {
 
 fn handleMouse(wb: anytype, canvas: *Canvas, ev: events.Mouse) !void {
     switch (ev.btn) {
-        .Up => try canvas.scrollUp(wb),
-        .Down => try canvas.scrollDown(wb),
-        .Left => switch (ev.press_state) {
-            .Down => {},
-            .Up => try canvas.gotoLine(wb, ev.row),
+        .up => try canvas.scrollUp(wb),
+        .down => try canvas.scrollDown(wb),
+        .left => switch (ev.press_state) {
+            .down => {},
+            .up => try canvas.gotoLine(wb, ev.row),
         },
         else => {
             try canvas.resetStatusLine(wb, "{any}", .{ev});
