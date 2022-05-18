@@ -146,13 +146,16 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
         .up => try canvas.scrollUp(writer),
         .down => try canvas.scrollDown(writer),
         .left => switch (ev.press_state) {
-            .down => {},
+            .down => {
+                try canvas.resetStatusLine(writer, "{any}", .{ev});
+        },
             .up => {
                 if (canvas.screen_cursor == ev.row) {
                     _ = try play(allocator, canvas.data[canvas.data_cursor]);
-                } else if (ev.row < canvas.screen_high) {
+                } else if (ev.row <= canvas.screen_high) {
                     try canvas.gotoLine(writer, ev.row);
                 } else {
+                    try canvas.resetStatusLine(writer, "click outside of screen", .{});
                     // out of screen, leave it
                 }
             },
@@ -163,8 +166,39 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
     }
 }
 
-fn handleKeyCodes(writer: anytype, canvas: Canvas, ev: events.KeyCodes) !void {
-    try canvas.resetStatusLine(writer, "codes: {any}", .{ev});
+fn handleKeyCodes(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.KeyCodes) !void {
+    if (mem.startsWith(u8, ev.codes, "\x1b[")) {
+        switch (ev.codes.len) {
+            3 => switch (ev.codes[2]) {
+                // arrow up
+                'A' => try canvas.scrollUp(writer),
+                // arrow down
+                'B' => try canvas.scrollDown(writer),
+                // arrow right
+                'C' => _ = try play(allocator, canvas.data[canvas.data_cursor]),
+                else => {
+                    try canvas.resetStatusLine(writer, "codes: {any} '{c}'", .{ ev, ev.codes[2..ev.codes.len] });
+                },
+            },
+            else => {
+                try canvas.resetStatusLine(writer, "codes: {any} '{c}'", .{ ev, ev.codes[2..ev.codes.len] });
+            },
+        }
+    } else if (mem.startsWith(u8, ev.codes, "\x1bO")) {
+        switch (ev.codes[2]) {
+            // F1
+            'P' => {
+                try canvas.resetStatusLine(writer, "data_high={any}; window.[rows={},high={}]; status.[rows={},high={}]; screen.[rows={},low={},high={}]; cursor.[data={},screen={}]", .{
+                    canvas.data_high, canvas.window_rows, canvas.window_high, canvas.status_rows, canvas.status_low, canvas.screen_rows, canvas.screen_low, canvas.screen_high, canvas.data_cursor, canvas.screen_cursor,
+                });
+            },
+            else => {
+                try canvas.resetStatusLine(writer, "codes: {any} '{c}'", .{ ev, fmt.fmtSliceEscapeLower(ev.codes) });
+            },
+        }
+    } else {
+        try canvas.resetStatusLine(writer, "codes: {any} '{c}'", .{ ev, fmt.fmtSliceEscapeLower(ev.codes) });
+    }
 }
 
 fn createLogwriter() !fs.File.Writer {
@@ -228,11 +262,11 @@ pub fn main() !void {
     }
 
     // construct frames
-    try escseq.Cap.changeScrollableRegion(w, 0, canvas.screen_high);
     try escseq.Private.enableMouseInput(w);
     defer escseq.Private.disableMouseInput(w) catch unreachable;
 
     // first draw
+    try canvas.resetGrids(wb);
     try canvas.redraw(wb, true);
     try escseq.Cursor.home(wb);
     try canvas.highlightCurrentLine(wb);
@@ -268,7 +302,7 @@ pub fn main() !void {
                     };
                 },
                 .codes => |codes| {
-                    try handleKeyCodes(wb, canvas, codes);
+                    try handleKeyCodes(allocator, wb, &canvas, codes);
                 },
             }
 

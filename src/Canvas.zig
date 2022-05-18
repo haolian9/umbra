@@ -76,6 +76,7 @@ pub fn resizeWindowHeight(self: *Self, window_rows: u16, wb: anytype) !void {
         // shorter
         // todo@haoliang: keep cursor where it is or at the bottom of screen
         self.resetWindowHeight(window_rows);
+        try self.resetGrids(wb);
 
         const screen_gap = self.screen_cursor;
         self.screen_cursor -= screen_gap;
@@ -85,6 +86,7 @@ pub fn resizeWindowHeight(self: *Self, window_rows: u16, wb: anytype) !void {
     } else if (window_rows > self.window_rows) {
         // longer
         self.resetWindowHeight(window_rows);
+        try self.resetGrids(wb);
 
         try self.redraw(wb, true);
     } else {
@@ -131,7 +133,7 @@ fn writeHighlightedItem(self: Self, wb: anytype, item: []const u8) !void {
     } else {
         try wb.print(" ", .{});
     }
-    try escseq.SGR.rendition(wb, &.{ .fg_red, .bold});
+    try escseq.SGR.rendition(wb, &.{ .fg_red, .bold });
     try wb.print("{s}", .{parts.stem});
     try escseq.SGR.rendition(wb, &.{.reset});
     try wb.print("{s}", .{parts.ext});
@@ -298,15 +300,25 @@ pub fn gotoLine(self: *Self, wb: anytype, row: u16) !void {
         try escseq.Cursor.goto(wb, 0, self.screen_cursor);
         try self.highlightCurrentLine(wb);
     } else if (row > self.screen_cursor) {
-        try self.resetCurrentLine(wb);
         const gap = row - self.screen_cursor;
-        self.screen_cursor += gap;
-        self.data_cursor += gap;
-        try escseq.Cursor.goto(wb, 0, self.screen_cursor);
-        try self.highlightCurrentLine(wb);
+        if (gap <= self.data_high - self.data_cursor) {
+            try self.resetCurrentLine(wb);
+            self.screen_cursor += gap;
+            self.data_cursor += gap;
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.highlightCurrentLine(wb);
+        } else {
+            // stay
+            try self.resetStatusLine(wb, "click outside of data", .{});
+        }
     } else {
         // stay
     }
+}
+
+pub fn resetGrids(self: Self, wb: anytype) !void {
+    try escseq.Cap.changeScrollableRegion(wb, 0, self.screen_high);
+    try escseq.Private.enableMouseInput(wb);
 }
 
 test "path parts" {
