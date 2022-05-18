@@ -8,6 +8,7 @@ const linux = std.os.linux;
 const logger = std.log;
 const fs = std.fs;
 const builtin = @import("builtin");
+const rand = std.rand;
 
 const umbra = @import("./src/umbra.zig");
 const Canvas = umbra.Canvas;
@@ -24,6 +25,8 @@ const SigCtx = struct {
     tty: *TTY,
 };
 
+var SIGCTX: SigCtx = undefined;
+var PRNG: rand.DefaultPrng = undefined;
 var LOGWRITER: fs.File.Writer = undefined;
 
 pub fn log(
@@ -38,17 +41,13 @@ pub fn log(
     nosuspend LOGWRITER.print(prefix ++ format ++ "\n", args) catch unreachable;
 }
 
-var SIGCTX: ?*SigCtx = null;
-
 fn handleResize() !void {
-    if (SIGCTX) |ctx| {
-        const winsize = try ctx.tty.getWinSize();
+    const winsize = try SIGCTX.tty.getWinSize();
 
-        var buffer = ctx.tty.buffered_writer();
-        defer buffer.flush() catch unreachable;
+    var buffer = SIGCTX.tty.buffered_writer();
+    defer buffer.flush() catch unreachable;
 
-        try ctx.canvas.resizeWindowHeight(winsize.row_total, buffer.writer());
-    }
+    try SIGCTX.canvas.resizeWindowHeight(winsize.row_total, buffer.writer());
 }
 
 fn handleSIGWINCH(_: c_int) callconv(.C) void {
@@ -135,6 +134,13 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
             // * redraw the canvas
         },
 
+        // 's' => {
+        //     const random = PRNG.random();
+        //     random.shuffle([]const u8, canvas.data);
+        //     canvas.redraw(writer, true);
+        //     try canvas.resetStatusLine(writer, "shuffled data", .{});
+        // },
+
         else => |symbol| {
             try canvas.resetStatusLine(writer, "ascii: {c} {d}", .{ symbol, symbol });
         },
@@ -148,7 +154,7 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
         .left => switch (ev.press_state) {
             .down => {
                 try canvas.resetStatusLine(writer, "{any}", .{ev});
-        },
+            },
             .up => {
                 if (canvas.screen_cursor == ev.row) {
                     _ = try play(allocator, canvas.data[canvas.data_cursor]);
@@ -209,7 +215,14 @@ fn createLogwriter() !fs.File.Writer {
 }
 
 pub fn main() !void {
+
     LOGWRITER = io.getStdErr().writer();
+
+    PRNG = rand.DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        try os.getrandom(mem.asBytes(&seed));
+        break :blk seed;
+    });
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer assert(gpa.deinit() == false);
@@ -220,7 +233,7 @@ pub fn main() !void {
     defer if (maybe_roots) |roots| roots.deinit();
 
     const roots = if (maybe_roots) |roots| roots.items else &config.roots;
-    var files = try VideoFiles.fromRoots(allocator, roots, null);
+    var files = try VideoFiles.fromRoots(allocator, roots, PRNG.random());
     defer files.deinit();
 
     if (files.items.len < 1) {
@@ -248,13 +261,14 @@ pub fn main() !void {
         break :blk Canvas.init(files.items, winsize.row_total, 1, winsize.col_total - 1);
     };
 
+    SIGCTX = .{ .canvas = &canvas, .tty = &tty };
+
     {
         var act_chld: linux.Sigaction = undefined;
         os.sigaction(linux.SIG.CHLD, null, &act_chld);
         act_chld.handler.handler = handleSIGCHLD;
         os.sigaction(linux.SIG.CHLD, &act_chld, null);
 
-        SIGCTX = &.{ .canvas = &canvas, .tty = &tty };
         var act_winch: linux.Sigaction = undefined;
         os.sigaction(linux.SIG.WINCH, null, &act_winch);
         act_winch.handler.handler = handleSIGWINCH;
