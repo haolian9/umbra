@@ -6,7 +6,7 @@ const assert = std.debug.assert;
 
 allocator: mem.Allocator,
 tape: []const u8,
-items: []const []const u8,
+items: [][]const u8,
 
 const sentinel = '\x00';
 const suffixes = [_][]const u8{".mp4", ".mkv"};
@@ -14,7 +14,7 @@ const suffixes = [_][]const u8{".mp4", ".mkv"};
 const Self = @This();
 const VideoFiles = Self;
 
-pub fn init(allocator: mem.Allocator, tape: []const u8, items: []const []const u8) VideoFiles{
+pub fn init(allocator: mem.Allocator, tape: []const u8, items: [][]const u8) VideoFiles{
     return VideoFiles {
         .allocator = allocator,
         .tape = tape,
@@ -36,7 +36,7 @@ fn isVideoFile(basename: []const u8) bool {
 }
 
 /// VideoFiles.deinit() should be called eventually.
-pub fn fromRoots(allocator: mem.Allocator, roots: []const []const u8, random: ?rand.Random) !VideoFiles {
+pub fn fromRoots(allocator: mem.Allocator, roots: []const []const u8) !VideoFiles {
     const tape = blk: {
         var list = std.ArrayList(u8).init(allocator);
         errdefer list.deinit();
@@ -77,13 +77,7 @@ pub fn fromRoots(allocator: mem.Allocator, roots: []const []const u8, random: ?r
             }
         }
 
-        const items = list.toOwnedSlice();
-
-        if (random) |r| {
-            r.shuffle([]const u8, items);
-        }
-
-        break :blk items;
+        break :blk list.toOwnedSlice();
     };
     errdefer allocator.free(toc);
 

@@ -23,7 +23,7 @@ const PathParts = struct {
     }
 };
 
-data: []const []const u8,
+data: [][]const u8,
 data_high: usize,
 
 // window
@@ -45,7 +45,7 @@ screen_cursor: u16,
 
 const Self = @This();
 
-pub fn init(data: []const []const u8, window_rows: u16, status_rows: u16, item_width: u16) Self {
+pub fn init(data: [][]const u8, window_rows: u16, status_rows: u16, item_width: u16) Self {
     const window_high = window_rows - 1;
     const status_low = window_high - status_rows + 1;
     const screen_high = status_low - 1;

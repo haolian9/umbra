@@ -134,12 +134,13 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
             // * redraw the canvas
         },
 
-        // 's' => {
-        //     const random = PRNG.random();
-        //     random.shuffle([]const u8, canvas.data);
-        //     canvas.redraw(writer, true);
-        //     try canvas.resetStatusLine(writer, "shuffled data", .{});
-        // },
+        's' => {
+            const random = PRNG.random();
+            random.shuffle([]const u8, canvas.data);
+            try canvas.redraw(writer, true);
+            try canvas.highlightCurrentLine(writer);
+            try canvas.resetStatusLine(writer, "shuffled data", .{});
+        },
 
         else => |symbol| {
             try canvas.resetStatusLine(writer, "ascii: {c} {d}", .{ symbol, symbol });
@@ -233,7 +234,7 @@ pub fn main() !void {
     defer if (maybe_roots) |roots| roots.deinit();
 
     const roots = if (maybe_roots) |roots| roots.items else &config.roots;
-    var files = try VideoFiles.fromRoots(allocator, roots, PRNG.random());
+    var files = try VideoFiles.fromRoots(allocator, roots);
     defer files.deinit();
 
     if (files.items.len < 1) {
