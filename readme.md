@@ -16,7 +16,7 @@ concepts:
     * `\x1B[`
 
 naming convention
-* enum: CamelCase
+* enum: snake\_case
 * union: snake\_case
 
 goals/limits:
