@@ -157,14 +157,19 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
                 try canvas.resetStatusLine(writer, "{any}", .{ev});
             },
             .up => {
-                if (canvas.screen_cursor == ev.row) {
-                    _ = try play(allocator, canvas.data[canvas.data_cursor]);
-                } else if (ev.row <= canvas.screen_high) {
-                    try canvas.gotoLine(writer, ev.row);
-                } else {
-                    try canvas.resetStatusLine(writer, "click outside of screen", .{});
-                    // out of screen, leave it
-                }
+                const cursor_moved = blk: {
+                    if (canvas.screen_cursor == ev.row) {
+                        break :blk false;
+                    } else if (ev.row <= canvas.screen_high) {
+                        const before = canvas.screen_cursor;
+                        try canvas.gotoLine(writer, ev.row);
+                        break :blk before == canvas.screen_cursor;
+                    } else {
+                        // out of screen
+                        break :blk false;
+                    }
+                };
+                if (cursor_moved) _ = try play(allocator, canvas.data[canvas.data_cursor]);
             },
         },
         else => {
@@ -216,7 +221,6 @@ fn createLogwriter() !fs.File.Writer {
 }
 
 pub fn main() !void {
-
     LOGWRITER = io.getStdErr().writer();
 
     PRNG = rand.DefaultPrng.init(blk: {
