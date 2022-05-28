@@ -163,13 +163,13 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
                     } else if (ev.row <= canvas.screen_high) {
                         const before = canvas.screen_cursor;
                         try canvas.gotoLine(writer, ev.row);
-                        break :blk before == canvas.screen_cursor;
+                        break :blk before != canvas.screen_cursor;
                     } else {
                         // out of screen
                         break :blk false;
                     }
                 };
-                if (cursor_moved) _ = try play(allocator, canvas.data[canvas.data_cursor]);
+                if (!cursor_moved) _ = try play(allocator, canvas.data[canvas.data_cursor]);
             },
         },
         else => {
