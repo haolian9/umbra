@@ -172,6 +172,10 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
                 if (!cursor_moved) _ = try play(allocator, canvas.data[canvas.data_cursor]);
             },
         },
+        .mid, .right => switch (ev.press_state) {
+            .down => {},
+            .up => _ = try play(allocator, canvas.data[canvas.data_cursor]),
+        },
         else => {
             try canvas.resetStatusLine(writer, "{any}", .{ev});
         },
