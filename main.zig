@@ -114,7 +114,8 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
             _ = try play(allocator, canvas.data[canvas.data_cursor]);
         },
 
-        'd' => {
+        // \x08 for backspace
+        'd', '\x08' => {
             const old = canvas.data[canvas.data_cursor];
             const new = try fs.path.join(allocator, &.{ config.trash_dir, fs.path.basename(old) });
             defer allocator.free(new);
