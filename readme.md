@@ -30,4 +30,4 @@ goals/limits:
 
 todo:
 * ~~line overflow~~
-* the dir of trash should respect the partition of file to be deleted
+* ~~the dir of trash should respect the partition of file to be deleted~~

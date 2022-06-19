@@ -14,6 +14,7 @@ const umbra = @import("./src/umbra.zig");
 const Canvas = umbra.Canvas;
 const TTY = umbra.TTY;
 const VideoFiles = umbra.VideoFiles;
+const Mnts = umbra.Mnts;
 const escseq = umbra.escseq;
 const events = umbra.events;
 const cli_args = umbra.cli_args;
@@ -94,7 +95,8 @@ fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
     return pid;
 }
 
-fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.KeySymbol) !void {
+fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.KeySymbol, mnts: Mnts) !void {
+    _ = mnts;
     switch (ev.symbol) {
         'q' => return error.Quit,
         'j' => try canvas.scrollDown(writer),
@@ -116,19 +118,8 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
 
         // \x08 for backspace
         'd', '\x08' => {
-            const old = canvas.data[canvas.data_cursor];
-            const new = try fs.path.join(allocator, &.{ config.trash_dir, fs.path.basename(old) });
-            defer allocator.free(new);
-
-            blk: {
-                fs.renameAbsolute(old, new) catch |err| {
-                    logger.err("mv {s} {s}; err: {any}", .{ old, new, err });
-                    try canvas.resetStatusLine(writer, "{s}", .{err});
-                    break :blk;
-                };
-                logger.debug("mv {s} {s}", .{ old, new });
-                try canvas.resetStatusLine(writer, "trash {s}", .{canvas.wrapItem(old)});
-            }
+            const src = canvas.data[canvas.data_cursor];
+            try trashFile(allocator, mnts, writer, canvas, src);
 
             // todo@hl
             // * remove the file from the canvas.data
@@ -225,6 +216,23 @@ fn createLogwriter() !fs.File.Writer {
     return file.writer();
 }
 
+fn trashFile(allocator: mem.Allocator, mnts: Mnts, writer: anytype, canvas: *Canvas, src: []const u8) !void {
+    if (try mnts.mntpoint(src)) |root| {
+        const dest = try fs.path.join(allocator, &.{ root, config.trash_dir, fs.path.basename(src) });
+        defer allocator.free(dest);
+
+        logger.debug("mv {s} {s}", .{ src, dest });
+        try canvas.resetStatusLine(writer, "trashing {s}", .{canvas.wrapItem(src)});
+        fs.renameAbsolute(src, dest) catch |err| {
+            logger.err("mv {s} {s}; err: {any}", .{ src, dest, err });
+            try canvas.resetStatusLine(writer, "{s}", .{err});
+        };
+    } else {
+        logger.err("no mountpoint for {s}", .{src});
+        try canvas.resetStatusLine(writer, "no mntpoint for {s}", .{src});
+    }
+}
+
 pub fn main() !void {
     LOGWRITER = io.getStdErr().writer();
 
@@ -235,9 +243,12 @@ pub fn main() !void {
     });
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer assert(gpa.deinit() == false);
+    defer assert(!gpa.deinit());
 
     const allocator = gpa.allocator();
+
+    var mnts = try Mnts.init(allocator);
+    defer mnts.deinit();
 
     var maybe_roots = try cli_args.gatherArgRoots(allocator);
     defer if (maybe_roots) |roots| roots.deinit();
@@ -320,7 +331,7 @@ pub fn main() !void {
                     try handleMouse(allocator, wb, &canvas, mouse);
                 },
                 .symbol => |symbol| {
-                    handleKeySymbol(allocator, wb, &canvas, symbol) catch |err| switch (err) {
+                    handleKeySymbol(allocator, wb, &canvas, symbol, mnts) catch |err| switch (err) {
                         error.Quit => break,
                         else => return err,
                     };
