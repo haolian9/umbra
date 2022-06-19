@@ -158,19 +158,19 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
                 try canvas.resetStatusLine(writer, "{any}", .{ev});
             },
             .up => {
-                const cursor_moved = blk: {
+                const need_to_play = blk: {
                     if (canvas.screen_cursor == ev.row) {
-                        break :blk false;
+                        break :blk true;
                     } else if (ev.row <= canvas.screen_high) {
                         const before = canvas.screen_cursor;
                         try canvas.gotoLine(writer, ev.row);
-                        break :blk before != canvas.screen_cursor;
+                        break :blk before == canvas.screen_cursor;
                     } else {
                         // out of screen
                         break :blk false;
                     }
                 };
-                if (!cursor_moved) _ = try play(allocator, canvas.data[canvas.data_cursor]);
+                if (need_to_play) _ = try play(allocator, canvas.data[canvas.data_cursor]);
             },
         },
         .mid, .right => switch (ev.press_state) {
