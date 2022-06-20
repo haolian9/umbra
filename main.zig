@@ -108,12 +108,39 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
         'G' => try canvas.gotoLastLine(writer),
         'm' => {
             const screen_mid = canvas.screen_high / 2;
-            try canvas.gotoLine(writer, screen_mid);
+            try canvas.gotoLineOnScreen(writer, screen_mid);
         },
 
         '\r', 'l' => {
             // play the video
             _ = try play(allocator, canvas.data[canvas.data_cursor]);
+        },
+
+        // ctrl-u
+        21 => {
+            const row = canvas.screen_cursor;
+            {
+                var i: u16 = 0;
+                while (i <= canvas.screen_high): (i += 1) {
+                    try canvas.scrollUp(writer);
+                }
+            }
+            try canvas.gotoLineOnScreen(writer, row);
+            try canvas.redraw(writer, true);
+            try canvas.highlightCurrentLine(writer);
+        },
+        // ctrl-d
+        4 => {
+            const row = canvas.screen_cursor;
+            {
+                var i: u16 = 0;
+                while (i <= canvas.screen_high): (i += 1) {
+                    try canvas.scrollDown(writer);
+                }
+            }
+            try canvas.gotoLineOnScreen(writer, row);
+            try canvas.redraw(writer, true);
+            try canvas.highlightCurrentLine(writer);
         },
 
         // \x08 for backspace
@@ -154,7 +181,7 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
                         break :blk true;
                     } else if (ev.row <= canvas.screen_high) {
                         const before = canvas.screen_cursor;
-                        try canvas.gotoLine(writer, ev.row);
+                        try canvas.gotoLineOnScreen(writer, ev.row);
                         break :blk before == canvas.screen_cursor;
                     } else {
                         // out of screen

@@ -291,7 +291,7 @@ pub fn gotoLastLine(self: *Self, wb: anytype) !void {
 }
 
 /// row: 0-based
-pub fn gotoLine(self: *Self, wb: anytype, row: u16) !void {
+pub fn gotoLineOnScreen(self: *Self, wb: anytype, row: u16) !void {
     if (row < self.screen_cursor) {
         try self.resetCurrentLine(wb);
         const gap = self.screen_cursor - row;

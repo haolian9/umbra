@@ -35,7 +35,7 @@ fn handleMouse(wb: anytype, canvas: *Canvas, ev: events.Mouse) !void {
         .down => try canvas.scrollDown(wb),
         .left => switch (ev.press_state) {
             .down => {},
-            .up => try canvas.gotoLine(wb, ev.row),
+            .up => try canvas.gotoLineOnScreen(wb, ev.row),
         },
         else => {
             try canvas.resetStatusLine(wb, "{any}", .{ev});
