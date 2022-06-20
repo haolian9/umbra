@@ -219,7 +219,8 @@ fn createLogwriter() !fs.File.Writer {
 fn trashFile(allocator: mem.Allocator, mnts: Mnts, writer: anytype, canvas: *Canvas, src: []const u8) !void {
     const maybe = mnts.mntpoint(src) catch |err| switch (err) {
         error.FileNotFound, error.AccessDenied => {
-            try canvas.resetStatusLine(writer, "{s} {s}", .{err, src});
+            logger.err("{s}: {s}", .{ err, src });
+            try canvas.resetStatusLine(writer, "{s}: {s}", .{ @errorName(err), canvas.wrapItem(src) });
             return;
         },
         else => return err,
@@ -228,15 +229,15 @@ fn trashFile(allocator: mem.Allocator, mnts: Mnts, writer: anytype, canvas: *Can
         const dest = try fs.path.join(allocator, &.{ root, config.trash_dir, fs.path.basename(src) });
         defer allocator.free(dest);
 
-        logger.debug("mv {s} {s}", .{ src, dest });
-        try canvas.resetStatusLine(writer, "trashing {s}", .{canvas.wrapItem(src)});
-        fs.renameAbsolute(src, dest) catch |err| {
-            logger.err("mv {s} {s}; err: {any}", .{ src, dest, err });
-            try canvas.resetStatusLine(writer, "{s}", .{err});
-        };
+        if (fs.renameAbsolute(src, dest)) {
+            try canvas.resetStatusLine(writer, "trashed {s}", .{canvas.wrapItem(src)});
+        } else |err| {
+            logger.err("{s}: mv {s} {s}", .{ err, src, dest });
+            try canvas.resetStatusLine(writer, "{s}", .{@errorName(err)});
+        }
     } else {
-        logger.err("no mountpoint for {s}", .{src});
-        try canvas.resetStatusLine(writer, "no mntpoint for {s}", .{src});
+        logger.err("no mountpoint: {s}", .{src});
+        try canvas.resetStatusLine(writer, "no mntpoint: {s}", .{canvas.wrapItem(src)});
     }
 }
 
