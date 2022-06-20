@@ -217,7 +217,14 @@ fn createLogwriter() !fs.File.Writer {
 }
 
 fn trashFile(allocator: mem.Allocator, mnts: Mnts, writer: anytype, canvas: *Canvas, src: []const u8) !void {
-    if (try mnts.mntpoint(src)) |root| {
+    const maybe = mnts.mntpoint(src) catch |err| switch (err) {
+        error.FileNotFound, error.AccessDenied => {
+            try canvas.resetStatusLine(writer, "{s} {s}", .{err, src});
+            return;
+        },
+        else => return err,
+    };
+    if (maybe) |root| {
         const dest = try fs.path.join(allocator, &.{ root, config.trash_dir, fs.path.basename(src) });
         defer allocator.free(dest);
 

@@ -9,7 +9,6 @@ pub fn build(b: *Builder) void {
         const exe = b.addExecutable("umbra", "main.zig");
         exe.setBuildMode(mode);
         exe.setOutputDir(output_dir);
-        exe.linkLibC();
         exe.strip = true;
         exe.single_threaded = true;
         exe.install();
@@ -19,8 +18,7 @@ pub fn build(b: *Builder) void {
         const exe = b.addExecutable("lsmnts", "src/Mnts.zig");
         exe.setBuildMode(mode);
         exe.setOutputDir(output_dir);
-        exe.linkLibC();
-        exe.strip = true;
+        exe.strip = false;
         exe.single_threaded = true;
         exe.install();
     }
