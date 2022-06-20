@@ -7,6 +7,7 @@ const assert = std.debug.assert;
 const os = std.os;
 const fs = std.fs;
 const testing = std.testing;
+const log = std.log;
 
 allocator: mem.Allocator,
 lookup: Lookup,
@@ -54,7 +55,11 @@ pub fn init(allocator: mem.Allocator) !Self {
             var stat: linux.Stat = undefined;
             switch (linux.getErrno(linux.stat(&try os.toPosixPath(path), &stat))) {
                 .SUCCESS => {},
-                else => unreachable,
+                .ACCES, .PERM => continue,
+                else => |errno| {
+                    log.err("failed to stat mount point: {s} {any}", .{path, errno});
+                    unreachable;
+                },
             }
 
             try lookup.put(stat.dev, try allocator.dupe(u8, path));
@@ -72,11 +77,12 @@ pub fn mntpoint(self: Self, file: []const u8) !?[]const u8 {
     var stat: linux.Stat = undefined;
     switch (linux.getErrno(linux.stat(&path, &stat))) {
         .SUCCESS => {},
-        .NOENT => return error.FileNotFound,
-        .NOTDIR => return error.FileNotFound,
-        .ACCES => return error.AccessDenied,
-        .PERM => return error.AccessDenied,
-        else => unreachable,
+        .NOENT, .NOTDIR => return error.FileNotFound,
+        .ACCES, .PERM => return error.AccessDenied,
+        else => |errno| {
+            log.err("Mnts.mntpoint stat file failed: {s}, {any}", .{file, errno});
+            unreachable;
+        },
     }
 
     if (self.lookup.get(stat.dev)) |point| {
