@@ -1,10 +1,6 @@
-*
 zig-cache/
+zig-out/
 
-!.gitignore
-!/src/
-!*.zig
-!*.md
+.gdb_history
 
 /config.zig
-!/config.zig.example
