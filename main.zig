@@ -289,7 +289,7 @@ pub fn main() !void {
     defer if (maybe_roots) |roots| roots.deinit();
 
     const roots = if (maybe_roots) |roots| roots.items else &config.roots;
-    var files = try VideoFiles.fromRoots(allocator, roots);
+    var files = try VideoFiles.init(allocator, roots);
     defer files.deinit();
 
     if (files.items.len < 1) {
