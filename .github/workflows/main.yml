@@ -29,9 +29,7 @@ jobs:
       # Runs a single command using the runners shell
       - name: reveal facts
         run: |
-          echo $SHELL
           pwd
-          ls
           git branch -a
 
       - name: install zig
@@ -45,7 +43,7 @@ jobs:
           ln -s /opt/zig-${ver}/zig /usr/local/bin/zig
 
       - name: tests
-        run: echo fine.
+        run: zig test src/tests.zig
 
       - name: config
         run: cp .github/workflows/config.zig .
