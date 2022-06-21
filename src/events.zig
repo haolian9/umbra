@@ -2,6 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const mem = std.mem;
 const fmt = std.fmt;
+const testing = std.testing;
 
 pub const Event = union(enum) {
     mouse: Mouse,
@@ -81,14 +82,14 @@ pub const Mouse = struct {
         const btn = if (it.next()) |code|
             @intToEnum(Btn, try fmt.parseInt(u8, code, 10))
         else
-            return error.invalidButton;
+            return error.MissingButton;
 
         const col: u16 = blk: {
             if (it.next()) |code| {
                 const orig = try fmt.parseInt(u8, code, 10);
                 break :blk orig - 1;
             } else {
-                return error.invalidColumn;
+                return error.MissingColumn;
             }
         };
 
@@ -97,7 +98,7 @@ pub const Mouse = struct {
                 const orig = try fmt.parseInt(u8, code, 10);
                 break :blk orig - 1;
             } else {
-                return error.invalidRow;
+                return error.MissingRow;
             }
         };
 
@@ -121,3 +122,17 @@ pub const KeySymbol = struct {
 pub const KeyCodes = struct {
     codes: []const u8,
 };
+
+test "parse Mouse event" {
+    _ = try Mouse.fromString("\x1b[<2;98;21m");
+    _ = try Mouse.fromString("\x1b[<0;2;3M");
+}
+
+test "parse Event" {
+    _ = try Event.fromString("\x1b[<2;98;21m");
+    _ = try Event.fromString("\x1b[<0;2;3M");
+    _ = try Event.fromString("\x1b");
+    _ = try Event.fromString("\x1b[123");
+    _ = try Event.fromString("\x1b123");
+    _ = try Event.fromString("1");
+}
