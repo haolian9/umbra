@@ -9,24 +9,30 @@ const fs = std.fs;
 const testing = std.testing;
 const log = std.log;
 
-allocator: std.heap.ArenaAllocator,
+allocator: mem.Allocator,
 lookup: Lookup,
 
 const Self = @This();
+const Mnts = Self;
+
 pub const Lookup = std.AutoHashMap(linux.dev_t, []const u8);
 
+fn deinitLookup(allocator: mem.Allocator, lookup: *Lookup) void {
+    var iter = lookup.iterator();
+    while (iter.next()) |ent| {
+        allocator.free(ent.value_ptr.*);
+    }
+    lookup.deinit();
+}
+
 pub fn deinit(self: *Self) void {
-    self.allocator.deinit();
+    deinitLookup(self.allocator, &self.lookup);
 }
 
 /// self.deinit() must be honored.
-pub fn init(base_allocator: mem.Allocator) !Self {
-    var arena_alloc = std.heap.ArenaAllocator.init(base_allocator);
-    errdefer arena_alloc.deinit();
-
-    const allocator = arena_alloc.allocator();
-
+pub fn init(allocator: mem.Allocator) !Mnts {
     var lookup = Lookup.init(allocator);
+    errdefer deinitLookup(allocator, &lookup);
 
     var file = try fs.openFileAbsolute("/proc/mounts", .{ .read = true });
     defer file.close();
@@ -69,8 +75,8 @@ pub fn init(base_allocator: mem.Allocator) !Self {
         }
     }
 
-    return Self{
-        .allocator = arena_alloc,
+    return Mnts{
+        .allocator = allocator,
         .lookup = lookup,
     };
 }
