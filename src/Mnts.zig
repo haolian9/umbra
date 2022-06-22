@@ -28,7 +28,7 @@ pub fn init(base_allocator: mem.Allocator) !Self {
 
     var lookup = Lookup.init(allocator);
 
-    var file = try std.fs.openFileAbsolute("/proc/mounts", .{ .read = true });
+    var file = try fs.openFileAbsolute("/proc/mounts", .{ .read = true });
     defer file.close();
 
     const reader = file.reader();
@@ -53,12 +53,19 @@ pub fn init(base_allocator: mem.Allocator) !Self {
                 .SUCCESS => {},
                 .ACCES, .PERM => continue,
                 else => |errno| {
-                    log.err("failed to stat mount point: {s} {any}", .{path, errno});
+                    log.err("failed to stat mount point: {s} {any}", .{ path, errno });
                     unreachable;
                 },
             }
 
-            try lookup.put(stat.dev, try allocator.dupe(u8, path));
+            const gop = try lookup.getOrPut(stat.dev);
+            if (gop.found_existing) {
+                // keeps the first mount point
+                log.warn("ignored duplicate mount point for {d} at {s}", .{ gop.key_ptr.*, path });
+            } else {
+                errdefer _ = lookup.remove(gop.key_ptr.*);
+                gop.value_ptr.* = try allocator.dupe(u8, path);
+            }
         }
     }
 
@@ -76,7 +83,7 @@ pub fn mntpoint(self: Self, file: []const u8) !?[]const u8 {
         .NOENT, .NOTDIR => return error.FileNotFound,
         .ACCES, .PERM => return error.AccessDenied,
         else => |errno| {
-            log.err("Mnts.mntpoint stat file failed: {s}, {any}", .{file, errno});
+            log.err("Mnts.mntpoint stat file failed: {s}, {any}", .{ file, errno });
             unreachable;
         },
     }
