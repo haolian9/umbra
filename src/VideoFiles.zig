@@ -3,6 +3,7 @@ const fs = std.fs;
 const mem = std.mem;
 const rand = std.rand;
 const assert = std.debug.assert;
+const log = std.log;
 
 allocator: std.heap.ArenaAllocator,
 items: [][]const u8,
@@ -34,7 +35,16 @@ pub fn init(base_allocator: mem.Allocator, roots: []const []const u8) !VideoFile
     var list = std.ArrayList([]const u8).init(allocator);
 
     for (roots) |root| {
-        var dir = try fs.openDirAbsolute(root, .{ .iterate = true });
+        var dir = fs.openDirAbsolute(root, .{ .iterate = true }) catch |err| switch (err) {
+            error.FileNotFound => {
+                log.info("{s} not exists, skipped", .{root});
+                continue;
+            },
+            else => {
+                log.err("open dir error: {s} {}", .{ root, err });
+                unreachable;
+            },
+        };
         defer dir.close();
 
         var it = try dir.walk(base_allocator);
