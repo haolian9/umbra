@@ -19,10 +19,9 @@ pub fn deinit(self: *Self) void {
 
 fn isVideoFile(basename: []const u8) bool {
     const ext = fs.path.extension(basename);
-    inline for (suffixes) |suf| {
-        if (mem.eql(u8, ext, suf)) return true;
-    }
-    return false;
+    return inline for (suffixes) |suf| {
+        if (mem.eql(u8, ext, suf)) break true;
+    } else false;
 }
 
 /// VideoFiles.deinit() should be called eventually.
