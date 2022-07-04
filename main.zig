@@ -64,7 +64,7 @@ fn handleSIGCHLD(_: c_int) callconv(.C) void {
 /// mpv ignores SIGHUP, after the main exits, pid 1 will be it's parent.
 /// and that's ok.
 fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
-    const argv: []const []const u8 = &.{ "/usr/bin/mpv", file };
+    const argv: []const []const u8 = &.{ "/usr/bin/mpv", "--no-terminal", file };
 
     // stole from std.ChildProcess.spawnPosix
     var arena_allocator = std.heap.ArenaAllocator.init(allocator);
