@@ -121,7 +121,7 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
             const row = canvas.screen_cursor;
             {
                 var i: u16 = 0;
-                while (i <= canvas.screen_high): (i += 1) {
+                while (i <= canvas.screen_high) : (i += 1) {
                     try canvas.scrollUp(writer);
                 }
             }
@@ -134,7 +134,7 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
             const row = canvas.screen_cursor;
             {
                 var i: u16 = 0;
-                while (i <= canvas.screen_high): (i += 1) {
+                while (i <= canvas.screen_high) : (i += 1) {
                     try canvas.scrollDown(writer);
                 }
             }
@@ -182,7 +182,8 @@ fn handleMouse(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: e
                     } else if (ev.row <= canvas.screen_high) {
                         const before = canvas.screen_cursor;
                         try canvas.gotoLineOnScreen(writer, ev.row);
-                        break :blk before == canvas.screen_cursor;
+                        // false when data is not enough to fill one single page
+                        break :blk if (ev.row > canvas.data_high) false else before == canvas.screen_cursor;
                     } else {
                         // out of screen
                         break :blk false;
