@@ -24,6 +24,7 @@ const config = @import("./config.zig");
 const SigCtx = struct {
     canvas: *Canvas,
     tty: *TTY,
+    buffered_writer: *TTY.BufferedWriter,
 };
 
 var SIGCTX: SigCtx = undefined;
@@ -44,15 +45,16 @@ pub fn log(
 
 fn handleResize() !void {
     const winsize = try SIGCTX.tty.getWinSize();
+    logger.debug("WINCH; new winsize {any}", .{winsize});
 
-    var buffer = SIGCTX.tty.buffered_writer();
-    defer buffer.flush() catch unreachable;
-
-    try SIGCTX.canvas.resizeWindowHeight(winsize.row_total, buffer.writer());
+    // ensure clean
+    assert(SIGCTX.buffered_writer.fifo.readableLength() == 0);
+    try SIGCTX.canvas.resizeScreen(winsize.row_total, SIGCTX.buffered_writer.writer());
+    try SIGCTX.buffered_writer.flush();
+    logger.debug("WINCH; resized canvas {any}", .{SIGCTX.canvas});
 }
 
 fn handleSIGWINCH(_: c_int) callconv(.C) void {
-    logger.debug("WINCH", .{});
     handleResize() catch unreachable;
 }
 
@@ -299,10 +301,10 @@ pub fn main() !void {
     }
 
     LOGWRITER = try createLogwriter();
-    defer {
-        LOGWRITER.context.close();
-        LOGWRITER = io.getStdErr().writer();
-    }
+    defer LOGWRITER.context.close();
+
+    try os.dup2(LOGWRITER.context.handle, io.getStdErr().handle);
+    try os.dup2(LOGWRITER.context.handle, io.getStdOut().handle);
 
     var tty = try TTY.init();
     defer tty.deinit();
@@ -318,7 +320,7 @@ pub fn main() !void {
         break :blk Canvas.init(files.items, winsize.row_total, 1, winsize.col_total - 1);
     };
 
-    SIGCTX = .{ .canvas = &canvas, .tty = &tty };
+    SIGCTX = .{ .canvas = &canvas, .tty = &tty, .buffered_writer = &buffer };
 
     {
         var act_chld: linux.Sigaction = undefined;
@@ -337,7 +339,7 @@ pub fn main() !void {
     defer escseq.Private.disableMouseInput(w) catch unreachable;
 
     // first draw
-    try canvas.resetGrids(wb);
+    try canvas.resetScrollableRegion(wb);
     try canvas.redraw(wb, true);
     try escseq.Cursor.home(wb);
     try canvas.highlightCurrentLine(wb);

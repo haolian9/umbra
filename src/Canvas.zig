@@ -1,8 +1,8 @@
 const std = @import("std");
-const fmt = std.fmt;
 const fs = std.fs;
 const mem = std.mem;
 const testing = std.testing;
+const logger = std.log;
 
 const escseq = @import("./escseq.zig");
 
@@ -70,40 +70,44 @@ pub fn init(data: [][]const u8, window_rows: u16, status_rows: u16, item_width: 
     };
 }
 
-pub fn resizeWindowHeight(self: *Self, window_rows: u16, wb: anytype) !void {
+pub fn resizeScreen(self: *Self, screen_rows: u16, wb: anytype) !void {
     // TODO@haoliang handles width/columns resize
-    if (window_rows < self.window_rows) {
+    if (screen_rows < self.screen_rows) {
         // shorter
-        // todo@haoliang: keep cursor where it is or at the bottom of screen
-        self.resetWindowHeight(window_rows);
-        try self.resetGrids(wb);
+        self.resetGridsBound(screen_rows);
+        try self.resetScrollableRegion(wb);
 
-        const screen_gap = self.screen_cursor;
-        self.screen_cursor -= screen_gap;
-        self.data_cursor -= screen_gap;
-        try self.redraw(wb, false);
-        try escseq.Cursor.goto(wb, 0, self.screen_cursor);
-    } else if (window_rows > self.window_rows) {
-        // longer
-        self.resetWindowHeight(window_rows);
-        try self.resetGrids(wb);
+        if (self.screen_cursor > self.screen_high) {
+            const shrinked_rows = self.screen_cursor - self.screen_high;
+            self.screen_cursor -= shrinked_rows;
+            self.data_cursor -= shrinked_rows;
+
+            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+        }
 
         try self.redraw(wb, true);
+        try self.highlightCurrentLine(wb);
+    } else if (screen_rows > self.screen_rows) {
+        // longer
+        self.resetGridsBound(screen_rows);
+        try self.resetScrollableRegion(wb);
+
+        try self.redraw(wb, true);
+        try self.highlightCurrentLine(wb);
     } else {
         // no change to the height
     }
 }
 
-fn resetWindowHeight(self: *Self, window_rows: u16) void {
-    const status_rows = self.status_rows;
-    const window_high = window_rows - 1;
-    const status_low = window_high - status_rows + 1;
+fn resetGridsBound(self: *Self, screen_rows: u16) void {
+    const screen_high = screen_rows - 1;
+    const window_high = screen_high - self.status_rows;
 
-    self.window_rows = window_rows;
+    self.screen_rows = screen_rows;
+    self.screen_high = screen_high;
+    self.window_rows = window_high + 1;
     self.window_high = window_high;
-    self.status_low = status_low;
-    self.screen_rows = window_rows - status_rows;
-    self.screen_high = status_low - 1;
+    self.status_low = window_high + 1;
 }
 
 /// cursor would move to the end of line
@@ -158,11 +162,11 @@ pub fn redraw(self: Self, wb: anytype, remember_cursor: bool) !void {
     }
 }
 
-pub fn resetStatusLine(self: Self, writer: anytype, comptime format: []const u8, args: anytype) !void {
+pub fn resetStatusLine(self: Self, writer: anytype, comptime fmt: []const u8, args: anytype) !void {
     try escseq.Cursor.save(writer);
     try escseq.Cursor.goto(writer, 0, self.status_low);
     try escseq.Erase.line(writer);
-    try fmt.format(writer, format, args);
+    try std.fmt.format(writer, fmt, args);
     try escseq.Cursor.restore(writer);
 }
 
@@ -316,9 +320,26 @@ pub fn gotoLineOnScreen(self: *Self, wb: anytype, row: u16) !void {
     }
 }
 
-pub fn resetGrids(self: Self, wb: anytype) !void {
+pub fn resetScrollableRegion(self: Self, wb: anytype) !void {
     try escseq.Cap.changeScrollableRegion(wb, 0, self.screen_high);
-    try escseq.Private.enableMouseInput(wb);
+}
+
+pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    _ = fmt;
+    _ = options;
+    try std.fmt.format(writer, "<Canvas: data_cursor={}, screen_cursor={}, data_high={}, windows_rows={}, windows_high={}, status_rows={}, status_low={}, screen_rows={}, screen_low={}, screen_high={}, item_width={}>", .{
+        self.data_cursor,
+        self.screen_cursor,
+        self.data_high,
+        self.window_rows,
+        self.window_high,
+        self.status_rows,
+        self.status_low,
+        self.screen_rows,
+        self.screen_low,
+        self.screen_high,
+        self.item_width,
+    });
 }
 
 test "path parts" {
