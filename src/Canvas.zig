@@ -70,6 +70,10 @@ pub fn init(data: [][]const u8, window_rows: u16, status_rows: u16, item_width: 
     };
 }
 
+fn relocate_cursor(self: Self, wb: anytype) !void {
+    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+}
+
 pub fn resizeScreen(self: *Self, screen_rows: u16, wb: anytype) !void {
     // TODO@haoliang handles width/columns resize
     if (screen_rows < self.screen_rows) {
@@ -81,8 +85,7 @@ pub fn resizeScreen(self: *Self, screen_rows: u16, wb: anytype) !void {
             const shrinked_rows = self.screen_cursor - self.screen_high;
             self.screen_cursor -= shrinked_rows;
             self.data_cursor -= shrinked_rows;
-
-            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.relocate_cursor(wb);
         }
 
         try self.redraw(wb, true);
@@ -144,6 +147,7 @@ fn writeHighlightedItem(self: Self, wb: anytype, item: []const u8) !void {
 }
 
 pub fn redraw(self: Self, wb: anytype, remember_cursor: bool) !void {
+    // todo: redraw partial: cursor-{down,up}ward
     if (remember_cursor) try escseq.Cursor.save(wb);
     defer if (remember_cursor) escseq.Cursor.restore(wb) catch unreachable;
 
@@ -177,7 +181,7 @@ pub fn scrollUp(self: *Self, wb: anytype) !void {
         self.data_cursor -= 1;
         try escseq.Cursor.prevLine(wb, 1);
         try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
-        try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+        try self.relocate_cursor(wb);
     } else if (self.screen_cursor == self.screen_low) {
         // self.screen_cursor no move
 
@@ -188,9 +192,9 @@ pub fn scrollUp(self: *Self, wb: anytype) !void {
             self.data_cursor -= 1;
             // need to update the first line
             try escseq.Cursor.scrollDown(wb, 1);
-            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.relocate_cursor(wb);
             try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
-            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.relocate_cursor(wb);
         } else {
             unreachable;
         }
@@ -209,7 +213,7 @@ pub fn scrollDown(self: *Self, wb: anytype) !void {
             self.data_cursor += 1;
             try escseq.Cursor.nextLine(wb, 1);
             try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
-            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.relocate_cursor(wb);
         } else {
             unreachable;
         }
@@ -222,9 +226,9 @@ pub fn scrollDown(self: *Self, wb: anytype) !void {
             try self.resetCurrentLine(wb);
             self.data_cursor += 1;
             try escseq.Cursor.scrollUp(wb, 1);
-            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.relocate_cursor(wb);
             try self.writeHighlightedItem(wb, self.data[self.data_cursor]);
-            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.relocate_cursor(wb);
         } else {
             unreachable;
         }
@@ -253,7 +257,7 @@ pub fn gotoLastLineOnScreen(self: *Self, wb: anytype) !void {
         screen_gap;
     self.screen_cursor += @intCast(u16, data_gap);
     self.data_cursor += data_gap;
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+    try self.relocate_cursor(wb);
     try self.highlightCurrentLine(wb);
 }
 
@@ -265,7 +269,7 @@ pub fn gotoFirstLineOnScreen(self: *Self, wb: anytype) !void {
     try self.resetCurrentLine(wb);
     self.screen_cursor = self.screen_low;
     self.data_cursor -= gap;
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+    try self.relocate_cursor(wb);
     try self.highlightCurrentLine(wb);
 }
 
@@ -275,7 +279,7 @@ pub fn gotoFirstLine(self: *Self, wb: anytype) !void {
     self.screen_cursor = self.screen_low;
     self.data_cursor = 0;
     try self.redraw(wb, false);
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+    try self.relocate_cursor(wb);
     try self.highlightCurrentLine(wb);
 }
 
@@ -290,7 +294,7 @@ pub fn gotoLastLine(self: *Self, wb: anytype) !void {
         self.data_cursor = self.data_high;
     }
     try self.redraw(wb, false);
-    try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+    try self.relocate_cursor(wb);
     try self.highlightCurrentLine(wb);
 }
 
@@ -301,7 +305,7 @@ pub fn gotoLineOnScreen(self: *Self, wb: anytype, row: u16) !void {
         const gap = self.screen_cursor - row;
         self.screen_cursor -= gap;
         self.data_cursor -= gap;
-        try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+        try self.relocate_cursor(wb);
         try self.highlightCurrentLine(wb);
     } else if (row > self.screen_cursor) {
         const gap = row - self.screen_cursor;
@@ -309,7 +313,7 @@ pub fn gotoLineOnScreen(self: *Self, wb: anytype, row: u16) !void {
             try self.resetCurrentLine(wb);
             self.screen_cursor += gap;
             self.data_cursor += gap;
-            try escseq.Cursor.goto(wb, 0, self.screen_cursor);
+            try self.relocate_cursor(wb);
             try self.highlightCurrentLine(wb);
         } else {
             // stay
@@ -322,6 +326,7 @@ pub fn gotoLineOnScreen(self: *Self, wb: anytype, row: u16) !void {
 
 pub fn resetScrollableRegion(self: Self, wb: anytype) !void {
     try escseq.Cap.changeScrollableRegion(wb, 0, self.screen_high);
+    try self.relocate_cursor(wb);
 }
 
 pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {

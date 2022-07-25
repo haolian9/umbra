@@ -330,6 +330,7 @@ pub const Cap = struct {
     }
 
     /// inclusive range of row, (low, high), 0-based
+    /// seems this esc-seq has a side effect that resets cursor to (0, 0)
     pub fn changeScrollableRegion(writer: anytype, low: u16, high: u16) !void {
         try fmt.format(writer, "\x1B[{d};{d}r", .{ low + 1, high + 1 });
     }

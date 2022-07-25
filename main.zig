@@ -45,13 +45,10 @@ pub fn log(
 
 fn handleResize() !void {
     const winsize = try SIGCTX.tty.getWinSize();
-    logger.debug("WINCH; new winsize {any}", .{winsize});
-
-    // ensure clean
+    // ensure no interleaving writes
     assert(SIGCTX.buffered_writer.fifo.readableLength() == 0);
     try SIGCTX.canvas.resizeScreen(winsize.row_total, SIGCTX.buffered_writer.writer());
     try SIGCTX.buffered_writer.flush();
-    logger.debug("WINCH; resized canvas {any}", .{SIGCTX.canvas});
 }
 
 fn handleSIGWINCH(_: c_int) callconv(.C) void {
@@ -150,9 +147,8 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
             const src = canvas.data[canvas.data_cursor];
             try trashFile(allocator, mnts, writer, canvas, src);
 
-            // todo@hl
-            // * remove the file from the canvas.data
-            // * redraw the canvas
+            // todo: remove the file from the canvas.data
+            // todo: redraw the canvas
         },
 
         's' => {
