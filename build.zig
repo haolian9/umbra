@@ -1,7 +1,6 @@
 const std = @import("std");
-const Builder = std.build.Builder;
 
-pub fn build(b: *Builder) void {
+pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
     const output_dir = if (b.env_map.get("HOME")) |home| b.pathJoin(&.{ home, "bin" }) else null;
 
@@ -42,16 +41,5 @@ pub fn build(b: *Builder) void {
             exe.single_threaded = true;
             exe.install();
         }
-    }
-
-    {
-        const exe = b.addExecutable("lsmnts", "src/Mnts.zig");
-        exe.setBuildMode(mode);
-        if (output_dir) |dir| {
-            exe.setOutputDir(dir);
-        }
-        exe.strip = strip;
-        exe.single_threaded = true;
-        exe.install();
     }
 }

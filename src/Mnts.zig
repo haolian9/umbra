@@ -100,22 +100,6 @@ pub fn mntpoint(self: Self, file: []const u8) !?[]const u8 {
     } else return null;
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer assert(!gpa.deinit());
-
-    const allocator = gpa.allocator();
-
-    var mnts = try Self.init(allocator);
-    defer mnts.deinit();
-
-    std.debug.print("mntpoints:\n", .{});
-    var iter = mnts.lookup.iterator();
-    while (iter.next()) |ent| {
-        std.debug.print("* {d}: {s}\n", .{ ent.key_ptr.*, ent.value_ptr.* });
-    }
-}
-
 test "stat errors" {
     var mnts = try Self.init(testing.allocator);
     defer mnts.deinit();
