@@ -46,7 +46,7 @@ pub fn log(
 fn handleResize() !void {
     const winsize = try SIGCTX.tty.getWinSize();
     // ensure no interleaving writes
-    assert(SIGCTX.buffered_writer.fifo.readableLength() == 0);
+    assert(SIGCTX.buffered_writer.buf.len == 0);
     try SIGCTX.canvas.resizeScreen(winsize.row_total, SIGCTX.buffered_writer.writer());
     try SIGCTX.buffered_writer.flush();
 }
@@ -85,7 +85,7 @@ fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
         os.close(1);
         os.close(2);
         const err = os.execvpeZ_expandArg0(.no_expand, argv_buf.ptr[0].?, argv_buf.ptr, envp);
-        logger.err("failed to exec: {s}", .{err});
+        logger.err("failed to exec: {}", .{err});
         unreachable;
     }
 
@@ -245,7 +245,7 @@ fn createLogwriter() !fs.File.Writer {
 fn trashFile(allocator: mem.Allocator, mnts: Mnts, writer: anytype, canvas: *Canvas, src: []const u8) !void {
     const maybe = mnts.mntpoint(src) catch |err| switch (err) {
         error.FileNotFound, error.AccessDenied => {
-            logger.err("{s}: {s}", .{ err, src });
+            logger.err("{}: {s}", .{ err, src });
             try canvas.resetStatusLine(writer, "{s}: {s}", .{ @errorName(err), canvas.wrapItem(src) });
             return;
         },
@@ -258,7 +258,7 @@ fn trashFile(allocator: mem.Allocator, mnts: Mnts, writer: anytype, canvas: *Can
         if (fs.renameAbsolute(src, dest)) {
             try canvas.resetStatusLine(writer, "trashed {s}", .{canvas.wrapItem(src)});
         } else |err| {
-            logger.err("{s}: mv {s} {s}", .{ err, src, dest });
+            logger.err("{}: mv {s} {s}", .{ err, src, dest });
             try canvas.resetStatusLine(writer, "{s}", .{@errorName(err)});
         }
     } else {
@@ -320,14 +320,14 @@ pub fn main() !void {
 
     {
         var act_chld: linux.Sigaction = undefined;
-        os.sigaction(linux.SIG.CHLD, null, &act_chld);
+        try os.sigaction(linux.SIG.CHLD, null, &act_chld);
         act_chld.handler.handler = handleSIGCHLD;
-        os.sigaction(linux.SIG.CHLD, &act_chld, null);
+        try os.sigaction(linux.SIG.CHLD, &act_chld, null);
 
         var act_winch: linux.Sigaction = undefined;
-        os.sigaction(linux.SIG.WINCH, null, &act_winch);
+        try os.sigaction(linux.SIG.WINCH, null, &act_winch);
         act_winch.handler.handler = handleSIGWINCH;
-        os.sigaction(linux.SIG.WINCH, &act_winch, null);
+        try os.sigaction(linux.SIG.WINCH, &act_winch, null);
     }
 
     // construct frames

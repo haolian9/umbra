@@ -23,7 +23,7 @@ origin: system.termios = undefined,
 term: system.termios = undefined,
 
 pub fn init() !TTY {
-    var file = try fs.openFileAbsolute("/dev/tty", .{ .read = true, .write = true });
+    var file = try fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
     errdefer file.close();
 
     const origin = try os.tcgetattr(file.handle);

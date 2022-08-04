@@ -34,7 +34,7 @@ pub fn init(allocator: mem.Allocator) !Mnts {
     var lookup = Lookup.init(allocator);
     errdefer deinitLookup(allocator, &lookup);
 
-    var file = try fs.openFileAbsolute("/proc/mounts", .{ .read = true });
+    var file = try fs.openFileAbsolute("/proc/mounts", .{ .mode = .read_only });
     defer file.close();
 
     const reader = file.reader();

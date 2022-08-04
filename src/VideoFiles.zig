@@ -34,7 +34,7 @@ pub fn init(base_allocator: mem.Allocator, roots: []const []const u8) !VideoFile
     var list = std.ArrayList([]const u8).init(allocator);
 
     for (roots) |root| {
-        var dir = fs.openDirAbsolute(root, .{ .iterate = true }) catch |err| switch (err) {
+        var dir = fs.openIterableDirAbsolute(root, .{}) catch |err| switch (err) {
             error.FileNotFound => {
                 log.info("{s} not exists, skipped", .{root});
                 continue;
