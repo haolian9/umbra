@@ -6,9 +6,9 @@ name: CI
 on:
   # Triggers the workflow on push or pull request events but only for the "master" branch
   push:
-    branches: [ "master" ]
+    branches: [ "master", 'ghci' ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "ghci" ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -32,12 +32,20 @@ jobs:
           pwd
           git branch -a
 
-      - name: install zig
+      # - name: install zig
+      #   run: |
+      #     ver=0.9.1
+      #     mkdir /tmp/zig-bin && cd /tmp/zig-bin
+      #     curl -SLO "https://ziglang.org/download/$ver/zig-linux-x86_64-${ver}.tar.xz"
+      #     tar xf zig-linux-x86_64-${ver}.tar.xz
+      #     mv zig-linux-x86_64-${ver} /opt/zig-${ver}
+      #     ln -s /opt/zig-${ver}/zig /usr/local/bin/zig
+
+      - name: install zig dev
         run: |
-          ver=0.9.1
-          test -n "${ver}"
+          ver=0.10.0-dev.3431+4a4f3c50c
           mkdir /tmp/zig-bin && cd /tmp/zig-bin
-          curl -SLO "https://ziglang.org/download/$ver/zig-linux-x86_64-${ver}.tar.xz"
+          curl -SLO "https://ziglang.org/builds/zig-linux-x86_64-${ver}.tar.xz"
           tar xf zig-linux-x86_64-${ver}.tar.xz
           mv zig-linux-x86_64-${ver} /opt/zig-${ver}
           ln -s /opt/zig-${ver}/zig /usr/local/bin/zig
