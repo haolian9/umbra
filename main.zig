@@ -10,7 +10,7 @@ const fs = std.fs;
 const builtin = @import("builtin");
 const rand = std.rand;
 
-const umbra = @import("./src/umbra.zig");
+const umbra = @import("src/umbra.zig");
 const Canvas = umbra.Canvas;
 const TTY = umbra.TTY;
 const VideoFiles = umbra.VideoFiles;
@@ -19,7 +19,7 @@ const escseq = umbra.escseq;
 const events = umbra.events;
 const cli_args = umbra.cli_args;
 
-const config = @import("./config.zig");
+const config = @import("config.zig");
 
 const SigCtx = struct {
     canvas: *Canvas,
@@ -44,9 +44,9 @@ pub fn log(
 }
 
 fn handleResize() !void {
-    const winsize = try SIGCTX.tty.getWinSize();
     // ensure no interleaving writes
-    assert(SIGCTX.buffered_writer.buf.len == 0);
+    assert(SIGCTX.buffered_writer.buf.end == 0);
+    const winsize = try SIGCTX.tty.getWinSize();
     try SIGCTX.canvas.resizeScreen(winsize.row_total, SIGCTX.buffered_writer.writer());
     try SIGCTX.buffered_writer.flush();
 }
