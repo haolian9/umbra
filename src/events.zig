@@ -18,6 +18,11 @@ pub const Event = union(enum) {
             }
 
             if (input[1] == '[') {
+                // alt-<key>
+                if (input.len == 2) {
+                    return Event{ .codes = .{ .codes = input } };
+                }
+
                 return switch (input[2]) {
                     '<' => Event{ .mouse = try Mouse.fromString(input) },
                     else => Event{ .codes = .{ .codes = input } },
