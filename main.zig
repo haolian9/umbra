@@ -45,7 +45,7 @@ pub fn log(
 
 fn handleResize() !void {
     // ensure no interleaving writes
-    assert(SIGCTX.buffered_writer.buf.end == 0);
+    assert(SIGCTX.buffered_writer.end == 0);
     const winsize = try SIGCTX.tty.getWinSize();
     try SIGCTX.canvas.resizeScreen(winsize.row_total, SIGCTX.buffered_writer.writer());
     try SIGCTX.buffered_writer.flush();
@@ -313,7 +313,7 @@ pub fn main() !void {
 
     var canvas: Canvas = blk: {
         const winsize = try tty.getWinSize();
-        break :blk Canvas.init(files.items, winsize.row_total, 1, winsize.col_total - 1);
+        break :blk Canvas.init(files.items, winsize.row_total, 0, winsize.col_total - 1);
     };
 
     SIGCTX = .{ .canvas = &canvas, .tty = &tty, .buffered_writer = &buffer };

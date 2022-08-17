@@ -2,7 +2,6 @@ const std = @import("std");
 
 pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
-    const output_dir = if (b.env_map.get("HOME")) |home| b.pathJoin(&.{ home, "bin" }) else null;
 
     const strip = switch (mode) {
         .Debug => false,
@@ -34,9 +33,6 @@ pub fn build(b: *std.build.Builder) void {
             const exe = b.addExecutable(name, "main.zig");
             exe.setBuildMode(mode);
             exe.setTarget(ent.target);
-            if (output_dir) |dir| {
-                exe.setOutputDir(dir);
-            }
             exe.strip = strip;
             exe.single_threaded = true;
             exe.install();

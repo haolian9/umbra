@@ -1,7 +1,7 @@
 const std = @import("std");
 const fmt = std.fmt;
 
-const umbra = @import("./src/umbra.zig");
+const umbra = @import("src/umbra.zig");
 const TTY = umbra.TTY;
 const escseq = umbra.escseq;
 const events = umbra.events;
@@ -28,7 +28,7 @@ pub fn main() !void {
 
             switch (event) {
                 .mouse => |mouse| {
-                    try w.print("input:mouse: {s}\n", .{mouse});
+                    try w.print("input:mouse: {any}\n", .{mouse});
                 },
                 .symbol => |symbol| {
                     switch (symbol.symbol) {
