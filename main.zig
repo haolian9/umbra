@@ -38,7 +38,7 @@ pub fn log(
     args: anytype,
 ) void {
     _ = scope;
-    const prefix = "[" ++ level.asText() ++ "] ";
+    const prefix = comptime "[" ++ level.asText() ++ "] ";
 
     nosuspend LOGWRITER.print(prefix ++ format ++ "\n", args) catch unreachable;
 }
