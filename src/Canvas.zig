@@ -4,7 +4,7 @@ const mem = std.mem;
 const testing = std.testing;
 const logger = std.log;
 
-const escseq = @import("./escseq.zig");
+const escseq = @import("escseq.zig");
 
 const PathParts = struct {
     // no trailing slash
@@ -155,7 +155,7 @@ pub fn redraw(self: Self, wb: anytype, remember_cursor: bool) !void {
     try escseq.Cursor.home(wb);
 
     const data_low: usize = self.data_cursor - (self.screen_cursor - self.screen_low);
-    const data_stop: usize = @minimum(self.data_cursor + (self.screen_high - self.screen_cursor) + 1, self.data.len);
+    const data_stop: usize = @min(self.data_cursor + (self.screen_high - self.screen_cursor) + 1, self.data.len);
     var data_cursor: u16 = 0;
     for (self.data[data_low..data_stop]) |item| {
         if (data_cursor != 0) {

@@ -95,7 +95,6 @@ fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
 }
 
 fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev: events.KeySymbol, mnts: Mnts) !void {
-    _ = mnts;
     switch (ev.symbol) {
         'q' => return error.Quit,
         'j' => try canvas.scrollDown(writer),
@@ -118,9 +117,11 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
         // ctrl-u
         21 => {
             const row = canvas.screen_cursor;
+            try canvas.gotoFirstLineOnScreen(writer);
             {
                 var i: u16 = 0;
-                while (i <= canvas.screen_high) : (i += 1) {
+                const screen_mid = canvas.screen_high / 2;
+                while (i <= screen_mid) : (i += 1) {
                     try canvas.scrollUp(writer);
                 }
             }
@@ -131,9 +132,11 @@ fn handleKeySymbol(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, e
         // ctrl-d
         4 => {
             const row = canvas.screen_cursor;
+            try canvas.gotoLastLineOnScreen(writer);
             {
                 var i: u16 = 0;
-                while (i <= canvas.screen_high) : (i += 1) {
+                const screen_mid = canvas.screen_high / 2;
+                while (i <= screen_mid) : (i += 1) {
                     try canvas.scrollDown(writer);
                 }
             }
