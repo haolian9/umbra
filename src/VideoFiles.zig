@@ -39,6 +39,10 @@ pub fn init(base_allocator: mem.Allocator, roots: []const []const u8) !VideoFile
                 log.info("{s} not exists, skipped", .{root});
                 continue;
             },
+            error.AccessDenied => {
+                log.info("{s} is not accessible, skipped", .{root});
+                continue;
+            },
             else => {
                 log.err("open dir error: {s} {}", .{ root, err });
                 unreachable;
