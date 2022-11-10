@@ -13,47 +13,34 @@ pub const Event = union(enum) {
 
     pub fn fromString(input: []const u8) !Event {
         if (input[0] == '\x1B') {
-            if (input.len == 1) {
-                return Event{ .symbol = .{ .symbol = '\x1B' } };
-            }
+            if (input.len == 1) return Event{ .symbol = .{ .symbol = '\x1B' } };
 
             if (input[1] == '[') {
                 // alt-<key>
-                if (input.len == 2) {
-                    return Event{ .codes = .{ .codes = input } };
-                }
+                if (input.len == 2) return Event{ .codes = .{ .codes = input } };
 
                 return switch (input[2]) {
                     '<' => Event{ .mouse = try Mouse.fromString(input) },
                     else => Event{ .codes = .{ .codes = input } },
                 };
-            } else {
-                return Event{ .codes = .{ .codes = input } };
-            }
+            } else return Event{ .codes = .{ .codes = input } };
         } else if (input.len == 1) {
             return Event{ .symbol = .{ .symbol = input[0] } };
-        } else {
-            unreachable;
-        }
+        } else unreachable;
     }
 
     pub fn format(self: Self, comptime _: []const u8, options: fmt.FormatOptions, writer: anytype) !void {
         _ = options;
 
         switch (self) {
-            .mouse => |mouse| {
-                try fmt.format(writer, "ignored mouse: {any}", .{mouse});
-            },
-            .symbol => |symbol| {
-                try fmt.format(writer, "ignored char: {c}", .{symbol.symbol});
-            },
-            .codes => |codes| {
-                try fmt.format(writer, "ignored codes: {any}", .{codes.codes});
-            },
+            .mouse => |mouse| try fmt.format(writer, "ignored mouse: {any}", .{mouse}),
+            .symbol => |symbol| try fmt.format(writer, "ignored char: {c}", .{symbol.symbol}),
+            .codes => |codes| try fmt.format(writer, "ignored codes: {any}", .{codes.codes}),
         }
     }
 };
 
+/// compatible with 1006 mode
 pub const Mouse = struct {
     btn: Btn,
     // 0-based
@@ -66,10 +53,15 @@ pub const Mouse = struct {
         left = 0,
         mid = 1,
         right = 2,
-        up = 64,
-        down = 65,
-        left_drag = 32, // 左键拖动
-        right_drag = 34, // 右键拖动
+        release = 3,
+        up = 4,
+        down = 5,
+        btn6 = 6,
+        btn7 = 7,
+        backward = 8,
+        forward = 9,
+        btn10 = 10,
+        btn11 = 11,
     };
 
     pub const PressState = enum(u8) {
@@ -84,28 +76,23 @@ pub const Mouse = struct {
 
         var it = mem.split(u8, str[3 .. str.len - 1], ";");
 
-        const btn = if (it.next()) |code|
-            @intToEnum(Btn, try fmt.parseInt(u8, code, 10))
-        else
-            return error.MissingButton;
+        const btn = if (it.next()) |code| blk: {
+            // todo: modifier set
+            const encoded = try fmt.parseInt(u8, code, 10);
+            // adding 128 -> 8~11; adding 64 -> 4~7
+            const base: u8 = if (encoded >= 128) 8 else if (encoded >= 64) 4 else 0;
+            break :blk @intToEnum(Btn, (encoded & ((1 << 2) - 1)) + base);
+        } else return error.MissingButton;
 
-        const col: u16 = blk: {
-            if (it.next()) |code| {
-                const orig = try fmt.parseInt(u8, code, 10);
-                break :blk orig - 1;
-            } else {
-                return error.MissingColumn;
-            }
-        };
+        const col: u16 = if (it.next()) |code| blk: {
+            const orig = try fmt.parseInt(u8, code, 10);
+            break :blk orig - 1;
+        } else return error.MissingColumn;
 
-        const row: u16 = blk: {
-            if (it.next()) |code| {
-                const orig = try fmt.parseInt(u8, code, 10);
-                break :blk orig - 1;
-            } else {
-                return error.MissingRow;
-            }
-        };
+        const row: u16 = if (it.next()) |code| blk: {
+            const orig = try fmt.parseInt(u8, code, 10);
+            break :blk orig - 1;
+        } else return error.MissingRow;
 
         assert(it.next() == null);
 

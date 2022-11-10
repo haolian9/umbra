@@ -1,3 +1,5 @@
+// ref: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+
 const std = @import("std");
 const fs = std.fs;
 const fmt = std.fmt;
@@ -238,12 +240,13 @@ pub const Private = struct {
         try writer.writeAll("\x1B[?1049l");
     }
 
+    /// see: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Normal-tracking-mode
     pub fn enableMouseInput(writer: anytype) !void {
-        try writer.writeAll("\x1B[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h");
+        try writer.writeAll("\x1B[?1000h\x1B[?1006h");
     }
 
     pub fn disableMouseInput(writer: anytype) !void {
-        try writer.writeAll("\x1B[?1006l\x1b[?1015l\x1b[?1002l\x1b[?1000l");
+        try writer.writeAll("\x1B[?1000l\x1B[?1006l");
     }
 };
 

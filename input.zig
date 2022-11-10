@@ -21,12 +21,10 @@ pub fn main() !void {
         var buffer: [16]u8 = undefined;
 
         while (true) {
-            const event = blk: {
-                const n = try tty.getInput(&buffer);
-                break :blk try events.Event.fromString(buffer[0..n]);
-            };
+            const input = buffer[0..try tty.getInput(&buffer)];
+            try w.print("raw: '{s}'\n", .{fmt.fmtSliceEscapeLower(input)});
 
-            switch (event) {
+            switch (try events.Event.fromString(input)) {
                 .mouse => |mouse| {
                     try w.print("input:mouse: {any}\n", .{mouse});
                 },

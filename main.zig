@@ -356,11 +356,7 @@ pub fn main() !void {
             const event: events.Event = blk: {
                 const n = try tty.getInput(&input_buffer);
                 const input = input_buffer[0..n];
-                break :blk events.Event.fromString(input) catch |err| switch (err) {
-                    // 连续滚动鼠标滚轮，有很大概率会出现这个错误, 目前先忽略掉
-                    error.InvalidCharacter => continue,
-                    else => return err,
-                };
+                break :blk try events.Event.fromString(input);
             };
 
             switch (event) {
