@@ -19,7 +19,7 @@ const escseq = umbra.escseq;
 const events = umbra.events;
 const cli_args = umbra.cli_args;
 
-const config = @import("config.zig");
+const config = @import("config");
 
 const SigCtx = struct {
     canvas: *Canvas,
