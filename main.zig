@@ -316,22 +316,13 @@ pub fn main() !void {
 
     var canvas: Canvas = blk: {
         const winsize = try tty.getWinSize();
-        break :blk Canvas.init(files.items, winsize.row_total, 0, winsize.col_total - 1);
+        break :blk Canvas.init(files.items, winsize.row_total, 1, winsize.col_total - 1);
     };
 
     SIGCTX = .{ .canvas = &canvas, .tty = &tty, .buffered_writer = &buffer };
 
-    {
-        var act_chld: linux.Sigaction = undefined;
-        try os.sigaction(linux.SIG.CHLD, null, &act_chld);
-        act_chld.handler.handler = handleSIGCHLD;
-        try os.sigaction(linux.SIG.CHLD, &act_chld, null);
-
-        var act_winch: linux.Sigaction = undefined;
-        try os.sigaction(linux.SIG.WINCH, null, &act_winch);
-        act_winch.handler.handler = handleSIGWINCH;
-        try os.sigaction(linux.SIG.WINCH, &act_winch, null);
-    }
+    try os.sigaction(linux.SIG.CHLD, &.{ .handler = .{ .handler = handleSIGCHLD }, .mask = linux.empty_sigset, .flags = 0 }, null);
+    try os.sigaction(linux.SIG.WINCH, &.{ .handler = .{ .handler = handleSIGWINCH }, .mask = linux.empty_sigset, .flags = 0 }, null);
 
     // construct frames
     try escseq.Private.enableMouseInput(w);
