@@ -302,36 +302,45 @@ pub const SGR = struct {
     }
 };
 
-// ref `$ infocmp tmux-256color`
+// ref
+// * `$ infocmp tmux-256color`
+// * Predefined Capabilities: `man terminfo(5)`
 pub const Cap = struct {
-    pub const Kind = enum { tmux, alacritty };
+    pub const Kind = enum { Tmux, St, Alacritty };
 
+    // `tsl`
     pub fn toStatusLine(kind: Kind, writer: anytype) !void {
         try writer.writeAll(switch (kind) {
-            .Tmux => "\x1B]0;",
+            .Tmux, .St => "\x1B]0;",
             .Alacritty => "\x1B]2;",
         });
     }
 
+    // `fsl`
     pub fn fromStatusLine(writer: anytype) !void {
         try writer.writeAll("^G");
     }
 
+    // `dsl`
     pub fn disableStatusLine(kind: Kind, writer: anytype) !void {
         try writer.writeAll(switch (kind) {
             .Tmux => "\x1B]0;\x0007",
+            .St => "",
             .Alacritty => "\x1B]2;\x0007",
         });
     }
 
+    // `il1`
     pub fn insertLine(writer: anytype) !void {
         try writer.writeAll("\x1B[L");
     }
 
+    // `dl1`
     pub fn deleteLine(writer: anytype) !void {
         try writer.writeAll("\x1B[M");
     }
 
+    // `csr`
     /// inclusive range of row, (low, high), 0-based
     /// seems this esc-seq has a side effect that resets cursor to (0, 0)
     pub fn changeScrollableRegion(writer: anytype, low: u16, high: u16) !void {
