@@ -185,7 +185,7 @@ pub const Foreground = struct {
     };
 
     pub fn color(writer: anytype, code: Code) !void {
-        try fmt.format(writer, "\x1B[{d}m", .{@enumToInt(code)});
+        try fmt.format(writer, "\x1B[{d}m", .{@intFromEnum(code)});
     }
 
     pub fn default(writer: anytype) !void {
@@ -207,7 +207,7 @@ pub const Background = struct {
     };
 
     pub fn color(writer: anytype, code: Code) !void {
-        try fmt.format(writer, "\x1B[{d}m", .{@enumToInt(code)});
+        try fmt.format(writer, "\x1B[{d}m", .{@intFromEnum(code)});
     }
 
     pub fn default(writer: anytype) !void {
@@ -294,9 +294,9 @@ pub const SGR = struct {
     pub fn rendition(writer: anytype, attrs: []const Rendition) !void {
         if (attrs.len == 0) return;
 
-        try fmt.format(writer, "\x1B[{d}", .{@enumToInt(attrs[0])});
+        try fmt.format(writer, "\x1B[{d}", .{@intFromEnum(attrs[0])});
         for (attrs[1..]) |attr| {
-            try fmt.format(writer, ";{d}", .{@enumToInt(attr)});
+            try fmt.format(writer, ";{d}", .{@intFromEnum(attr)});
         }
         try writer.writeAll("m");
     }

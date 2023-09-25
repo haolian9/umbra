@@ -81,7 +81,7 @@ pub const Mouse = struct {
             const encoded = try fmt.parseInt(u8, code, 10);
             // adding 128 -> 8~11; adding 64 -> 4~7
             const base: u8 = if (encoded >= 128) 8 else if (encoded >= 64) 4 else 0;
-            break :blk @intToEnum(Btn, (encoded & ((1 << 2) - 1)) + base);
+            break :blk @as(Btn, @enumFromInt((encoded & ((1 << 2) - 1)) + base));
         } else return error.MissingButton;
 
         const col: u16 = if (it.next()) |code| blk: {
@@ -96,7 +96,7 @@ pub const Mouse = struct {
 
         assert(it.next() == null);
 
-        const press_state = @intToEnum(PressState, str[str.len - 1]);
+        const press_state = @as(PressState, @enumFromInt(str[str.len - 1]));
 
         return Mouse{
             .btn = btn,

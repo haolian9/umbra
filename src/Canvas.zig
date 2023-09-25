@@ -255,7 +255,7 @@ pub fn gotoLastLineOnScreen(self: *Self, wb: anytype) !void {
         self.data_high - self.data_cursor
     else
         screen_gap;
-    self.screen_cursor += @intCast(u16, data_gap);
+    self.screen_cursor += @intCast(data_gap);
     self.data_cursor += data_gap;
     try self.relocateCursor(wb);
     try self.highlightCurrentLine(wb);
@@ -289,7 +289,7 @@ pub fn gotoLastLine(self: *Self, wb: anytype) !void {
         self.screen_cursor = self.screen_high;
         self.data_cursor = self.data_high;
     } else {
-        const data_short = self.screen_high - @intCast(u16, self.data_high);
+        const data_short = self.screen_high - @as(u16, @intCast(self.data_high));
         self.screen_cursor = self.screen_high - data_short;
         self.data_cursor = self.data_high;
     }

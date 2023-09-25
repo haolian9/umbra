@@ -54,7 +54,7 @@ pub fn init(base_allocator: mem.Allocator, roots: []const []const u8) !VideoFile
         defer it.deinit();
 
         while (try it.next()) |entry| {
-            if (entry.kind != fs.File.Kind.File) continue;
+            if (entry.kind != fs.File.Kind.file) continue;
             if (!isVideoFile(entry.basename)) continue;
 
             const path = try fs.path.join(allocator, &.{ root, entry.path });
@@ -64,7 +64,7 @@ pub fn init(base_allocator: mem.Allocator, roots: []const []const u8) !VideoFile
         }
     }
 
-    var items = list.toOwnedSlice();
+    var items = try list.toOwnedSlice();
 
     return VideoFiles{
         .allocator = arena_alloc,

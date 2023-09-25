@@ -188,10 +188,10 @@ pub fn getWinSize(self: Self) !WinSize {
 
 pub fn getNativeWinSize(fd: system.fd_t) !system.winsize {
     var native = mem.zeroes(system.winsize);
-    const rc = system.ioctl(fd, system.T.IOCGWINSZ, @ptrToInt(&native));
+    const rc = system.ioctl(fd, system.T.IOCGWINSZ, @intFromPtr(&native));
 
     if (os.errno(rc) != .SUCCESS) {
-        return os.unexpectedErrno(@intToEnum(system.E, rc));
+        return os.unexpectedErrno(@enumFromInt(rc));
     }
 
     return native;

@@ -71,10 +71,10 @@ fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
     const arena = arena_allocator.allocator();
 
     const argv_buf = try arena.allocSentinel(?[*:0]u8, argv.len, null);
-    for (argv) |arg, i| argv_buf[i] = (try arena.dupeZ(u8, arg)).ptr;
+    for (argv, 0..) |arg, i| argv_buf[i] = (try arena.dupeZ(u8, arg)).ptr;
 
-    const envp = if (builtin.output_mode == .Exe)
-        @ptrCast([*:null]?[*:0]u8, os.environ.ptr)
+    const envp: [*:null]?[*:0]u8 = if (builtin.output_mode == .Exe)
+        @ptrCast(os.environ.ptr)
     else
         unreachable;
 
@@ -280,7 +280,7 @@ pub fn main() !void {
     });
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer assert(!gpa.deinit());
+    defer assert(gpa.deinit() != .leak);
 
     const allocator = gpa.allocator();
 

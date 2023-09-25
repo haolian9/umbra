@@ -38,7 +38,7 @@ pub fn gatherArgRoots(allocator: mem.Allocator) !?ArgRoots {
             try list.appendSlice(real);
             try list.append('\x00');
         }
-        break :blk list.toOwnedSlice();
+        break :blk try list.toOwnedSlice();
     };
     errdefer allocator.free(list);
 
@@ -47,14 +47,14 @@ pub fn gatherArgRoots(allocator: mem.Allocator) !?ArgRoots {
         errdefer roots.deinit();
 
         var start: usize = 0;
-        for (list) |char, stop| {
+        for (list, 0..) |char, stop| {
             if (char == '\x00') {
                 try roots.append(list[start..stop]);
                 start = stop + 1;
             }
         }
 
-        break :blk roots.toOwnedSlice();
+        break :blk try roots.toOwnedSlice();
     };
 
     return ArgRoots{
