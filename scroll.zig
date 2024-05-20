@@ -59,7 +59,7 @@ pub fn main() !void {
     const w = tty.writer();
     const wb = buffer.writer();
 
-    const data: [][]const u8 = comptime blk: {
+    const data: [][]const u8 = blk: {
         var data: [126 - 33 + 1][]const u8 = undefined;
         var i: u8 = 33;
         while (i <= 126) : (i += 1) {

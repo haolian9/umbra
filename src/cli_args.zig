@@ -5,7 +5,6 @@ const fs = std.fs;
 const process = std.process;
 const assert = std.debug.assert;
 
-
 pub const ArgRoots = struct {
     allocator: mem.Allocator,
     // allocated by self.allocator
@@ -33,7 +32,7 @@ pub fn gatherArgRoots(allocator: mem.Allocator) !?ArgRoots {
         var it = process.ArgIteratorPosix.init();
         _ = it.skip(); // skip the program name itself.
         while (it.next()) |path| {
-            const real = try os.realpath(path, &buffer);
+            const real = try std.posix.realpath(path, &buffer);
             assert(!mem.containsAtLeast(u8, real, 1, "\x00"));
             try list.appendSlice(real);
             try list.append('\x00');

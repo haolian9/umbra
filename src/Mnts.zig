@@ -3,8 +3,8 @@
 const std = @import("std");
 const mem = std.mem;
 const linux = std.os.linux;
+const posix = std.posix;
 const assert = std.debug.assert;
-const os = std.os;
 const fs = std.fs;
 const testing = std.testing;
 const log = std.log;
@@ -15,7 +15,7 @@ lookup: Lookup,
 const Self = @This();
 const Mnts = Self;
 
-pub const Lookup = std.AutoHashMap(linux.dev_t, []const u8);
+pub const Lookup = std.AutoHashMap(posix.dev_t, []const u8);
 
 fn deinitLookup(allocator: mem.Allocator, lookup: *Lookup) void {
     var iter = lookup.iterator();
@@ -54,8 +54,8 @@ pub fn init(allocator: mem.Allocator) !Mnts {
             _ = iter.next() orelse unreachable;
             const path = iter.next() orelse unreachable;
 
-            var stat: linux.Stat = undefined;
-            switch (linux.getErrno(linux.stat(&try os.toPosixPath(path), &stat))) {
+            var stat: posix.Stat = undefined;
+            switch (posix.errno(linux.stat(&try posix.toPosixPath(path), &stat))) {
                 .SUCCESS => {},
                 .ACCES, .PERM => continue,
                 else => |errno| {
@@ -82,9 +82,9 @@ pub fn init(allocator: mem.Allocator) !Mnts {
 }
 
 pub fn mntpoint(self: Self, file: []const u8) !?[]const u8 {
-    const path = try os.toPosixPath(file);
-    var stat: linux.Stat = undefined;
-    switch (linux.getErrno(linux.stat(&path, &stat))) {
+    const path = try posix.toPosixPath(file);
+    var stat: posix.Stat = undefined;
+    switch (posix.errno(linux.stat(&path, &stat))) {
         .SUCCESS => {},
         .NOENT, .NOTDIR => return error.FileNotFound,
         .ACCES, .PERM => return error.AccessDenied,

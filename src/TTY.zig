@@ -1,12 +1,12 @@
 // man 4 tty
 
 const std = @import("std");
-const fmt = std.fmt;
 const fs = std.fs;
 const mem = std.mem;
-const os = std.os;
-const system = std.os.linux;
-const io = std.io;
+const linux = std.os.linux;
+const posix = std.posix;
+
+const tc_lflag_t = std.c.tc_lflag_t;
 
 const escseq = @import("./escseq.zig");
 
@@ -16,17 +16,17 @@ const Self = TTY;
 // shortcuts
 pub const Reader = fs.File.Reader;
 pub const Writer = fs.File.Writer;
-pub const BufferedWriter = io.BufferedWriter(16 << 10, Writer);
+pub const BufferedWriter = std.io.BufferedWriter(16 << 10, Writer);
 
 file: fs.File = undefined,
-origin: system.termios = undefined,
-term: system.termios = undefined,
+origin: linux.termios = undefined,
+term: linux.termios = undefined,
 
 pub fn init() !TTY {
     var file = try fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
     errdefer file.close();
 
-    const origin = try os.tcgetattr(file.handle);
+    const origin = try posix.tcgetattr(file.handle);
     const term = origin;
 
     var tty = TTY{
@@ -54,23 +54,23 @@ pub fn deinit(self: *Self) void {
 fn setupTerm(self: *Self) !void {
     // see: man 3 termios
     // see: https://zig.news/lhp/want-to-create-a-tui-application-the-basics-of-uncooked-terminal-io-17gm
-    self.term.lflag &= ~@as(
-        system.tcflag_t,
-        system.ECHO | system.ICANON | system.ISIG | system.IEXTEN,
-    );
-    self.term.iflag &= ~@as(
-        system.tcflag_t,
-        system.IXON | system.ICRNL | system.BRKINT | system.INPCK | system.ISTRIP,
-    );
-    self.term.iflag &= ~@as(
-        system.tcflag_t,
-        system.IUTF8,
-    );
+    self.term.lflag.ECHO = false;
+    self.term.lflag.ICANON = false;
+    self.term.lflag.ISIG = false;
+    self.term.lflag.IEXTEN = false;
+
+    self.term.iflag.IXON = false;
+    self.term.iflag.ICRNL = false;
+    self.term.iflag.BRKINT = false;
+    self.term.iflag.INPCK = false;
+    self.term.iflag.ISTRIP = false;
+    self.term.iflag.IUTF8 = false;
 
     // read() return delays time when got something
-    self.term.cc[system.V.TIME] = 0;
+    self.term.cc[@intFromEnum(linux.V.TIME)] = 0;
+
     // read() return when min bytes read
-    self.term.cc[system.V.MIN] = 1;
+    self.term.cc[@intFromEnum(linux.V.MIN)] = 1;
 
     try self.applyTermiosChanges(self.term);
 }
@@ -95,23 +95,23 @@ fn cleanCanvas(self: Self) !void {
     try escseq.Cursor.restore(w);
 }
 
-fn applyTermiosChanges(self: Self, term: system.termios) !void {
-    try os.tcsetattr(self.file.handle, .FLUSH, term);
+fn applyTermiosChanges(self: Self, term: linux.termios) !void {
+    try posix.tcsetattr(self.file.handle, .FLUSH, term);
 }
 
-fn applyTermiosChangesNow(self: Self, term: system.termios) !void {
-    try os.tcsetattr(self.file.handle, .NOW, term);
+fn applyTermiosChangesNow(self: Self, term: linux.termios) !void {
+    try posix.tcsetattr(self.file.handle, .NOW, term);
 }
 
 pub fn enableMultibytesInput(self: *Self) !void {
-    self.term.cc[system.V.TIME] = 1;
-    self.term.cc[system.V.MIN] = 0;
+    self.term.cc[@intFromEnum(linux.V.TIME)] = 1;
+    self.term.cc[@intFromEnum(linux.V.MIN)] = 0;
     try self.applyTermiosChangesNow(self.term);
 }
 
 pub fn disableMultibytesInput(self: *Self) !void {
-    self.term.cc[system.V.TIME] = 0;
-    self.term.cc[system.V.MIN] = 1;
+    self.term.cc[@intFromEnum(linux.V.TIME)] = 0;
+    self.term.cc[@intFromEnum(linux.V.MIN)] = 1;
     try self.applyTermiosChangesNow(self.term);
 }
 
@@ -154,7 +154,7 @@ pub const WinSize = struct {
         };
     };
 
-    pub fn fromNative(native: system.winsize) WinSize {
+    pub fn fromNative(native: linux.winsize) WinSize {
         return .{
             .col_total = native.ws_col,
             .col_high = native.ws_col - 1,
@@ -163,7 +163,7 @@ pub const WinSize = struct {
         };
     }
 
-    pub fn sync(self: *WinSize, native: system.winsize) Resized {
+    pub fn sync(self: *WinSize, native: linux.winsize) Resized {
         var resized = Resized{};
 
         if (self.col_total != native.ws_col) {
@@ -186,12 +186,12 @@ pub fn getWinSize(self: Self) !WinSize {
     return WinSize.fromNative(try getNativeWinSize(self.file.handle));
 }
 
-pub fn getNativeWinSize(fd: system.fd_t) !system.winsize {
-    var native = mem.zeroes(system.winsize);
-    const rc = system.ioctl(fd, system.T.IOCGWINSZ, @intFromPtr(&native));
+pub fn getNativeWinSize(fd: linux.fd_t) !linux.winsize {
+    var native = mem.zeroes(linux.winsize);
+    const rc = linux.ioctl(fd, linux.T.IOCGWINSZ, @intFromPtr(&native));
 
-    if (os.errno(rc) != .SUCCESS) {
-        return os.unexpectedErrno(@enumFromInt(rc));
+    if (posix.errno(rc) != .SUCCESS) {
+        return posix.unexpectedErrno(@enumFromInt(rc));
     }
 
     return native;

@@ -1,14 +1,13 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const fmt = std.fmt;
-const os = std.os;
 const mem = std.mem;
 const io = std.io;
-const linux = std.os.linux;
 const logger = std.log;
 const fs = std.fs;
 const builtin = @import("builtin");
 const rand = std.rand;
+const posix = std.posix;
 
 const umbra = @import("src/umbra.zig");
 const Canvas = umbra.Canvas;
@@ -56,13 +55,13 @@ fn handleSIGWINCH(_: c_int) callconv(.C) void {
 }
 
 fn handleSIGCHLD(_: c_int) callconv(.C) void {
-    const r = os.waitpid(-1, linux.W.NOHANG);
+    const r = posix.waitpid(-1, posix.W.NOHANG);
     logger.debug("SIGCHILD: waitpid: {any}", .{r});
 }
 
 /// mpv ignores SIGHUP, after the main exits, pid 1 will be it's parent.
 /// and that's ok.
-fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
+fn play(allocator: mem.Allocator, file: []const u8) !posix.pid_t {
     const argv: []const []const u8 = &.{ "/usr/bin/mpv", "--no-terminal", file };
 
     // stole from std.ChildProcess.spawnPosix
@@ -74,17 +73,17 @@ fn play(allocator: mem.Allocator, file: []const u8) !os.pid_t {
     for (argv, 0..) |arg, i| argv_buf[i] = (try arena.dupeZ(u8, arg)).ptr;
 
     const envp: [*:null]?[*:0]u8 = if (builtin.output_mode == .Exe)
-        @ptrCast(os.environ.ptr)
+        @ptrCast(std.os.environ.ptr)
     else
         unreachable;
 
-    const pid = try os.fork();
+    const pid = try posix.fork();
 
     if (pid == 0) {
-        os.close(0);
-        os.close(1);
-        os.close(2);
-        const err = os.execvpeZ_expandArg0(.no_expand, argv_buf.ptr[0].?, argv_buf.ptr, envp);
+        posix.close(0);
+        posix.close(1);
+        posix.close(2);
+        const err = posix.execvpeZ_expandArg0(.no_expand, argv_buf.ptr[0].?, argv_buf.ptr, envp);
         logger.err("failed to exec: {}", .{err});
         unreachable;
     }
@@ -240,7 +239,7 @@ fn handleKeyCodes(allocator: mem.Allocator, writer: anytype, canvas: *Canvas, ev
 
 fn createLogwriter() !fs.File.Writer {
     var buffer: [fs.MAX_PATH_BYTES]u8 = undefined;
-    const path = try fmt.bufPrint(buffer[0..], "/tmp/{d}-umbra.log", .{linux.getuid()});
+    const path = try fmt.bufPrint(buffer[0..], "/tmp/{d}-umbra.log", .{std.os.linux.getuid()});
     var file = try fs.createFileAbsolute(path, .{});
     return file.writer();
 }
@@ -275,7 +274,7 @@ pub fn main() !void {
 
     PRNG = rand.DefaultPrng.init(blk: {
         var seed: u64 = undefined;
-        try os.getrandom(mem.asBytes(&seed));
+        try posix.getrandom(mem.asBytes(&seed));
         break :blk seed;
     });
 
@@ -287,7 +286,7 @@ pub fn main() !void {
     var mnts = try Mnts.init(allocator);
     defer mnts.deinit();
 
-    var maybe_roots = try cli_args.gatherArgRoots(allocator);
+    const maybe_roots = try cli_args.gatherArgRoots(allocator);
     defer if (maybe_roots) |roots| roots.deinit();
 
     const roots = if (maybe_roots) |roots| roots.items else &config.roots;
@@ -302,8 +301,8 @@ pub fn main() !void {
     LOGWRITER = try createLogwriter();
     defer LOGWRITER.context.close();
 
-    try os.dup2(LOGWRITER.context.handle, io.getStdErr().handle);
-    try os.dup2(LOGWRITER.context.handle, io.getStdOut().handle);
+    try posix.dup2(LOGWRITER.context.handle, io.getStdErr().handle);
+    try posix.dup2(LOGWRITER.context.handle, io.getStdOut().handle);
 
     var tty = try TTY.init();
     defer tty.deinit();
@@ -321,8 +320,8 @@ pub fn main() !void {
 
     SIGCTX = .{ .canvas = &canvas, .tty = &tty, .buffered_writer = &buffer };
 
-    try os.sigaction(linux.SIG.CHLD, &.{ .handler = .{ .handler = handleSIGCHLD }, .mask = linux.empty_sigset, .flags = 0 }, null);
-    try os.sigaction(linux.SIG.WINCH, &.{ .handler = .{ .handler = handleSIGWINCH }, .mask = linux.empty_sigset, .flags = 0 }, null);
+    try posix.sigaction(posix.SIG.CHLD, &.{ .handler = .{ .handler = handleSIGCHLD }, .mask = posix.empty_sigset, .flags = 0 }, null);
+    try posix.sigaction(posix.SIG.WINCH, &.{ .handler = .{ .handler = handleSIGWINCH }, .mask = posix.empty_sigset, .flags = 0 }, null);
 
     // construct frames
     try escseq.Private.enableMouseInput(w);
